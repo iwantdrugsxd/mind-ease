@@ -1,0 +1,17 @@
+{
+  "model_type": "nb",
+  "accuracy": 0.8701298701298701,
+  "num_classes": 9,
+  "num_patterns": 382,
+  "classes": [
+    "crisis",
+    "find_screening",
+    "find_self_care",
+    "goodbye",
+    "greeting",
+    "need_help",
+    "out_of_scope",
+    "thanks",
+    "view_dashboard"
+  ]
+}
