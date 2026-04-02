@@ -15,6 +15,7 @@ from .models import (
     GAD7Screening,
     ScreeningAlert,
 )
+from .lifestyle_insight_service import build_lifestyle_insight_summary
 
 
 def _ensure_records(patient: Patient) -> Tuple[PatientProfile, PatientBaseline, PatientConsent, PatientPreferences, PatientOnboardingStatus]:
@@ -818,6 +819,7 @@ def build_user_state_summary(patient: Patient, *, readonly: bool = False) -> Dic
             "recommended_action_type": None,  # populated below
         },
     }
+    summary["lifestyle_insights"] = build_lifestyle_insight_summary(patient, summary)
     next_best_action = _build_next_best_action(summary)
     summary["next_best_action"] = next_best_action
     summary["analytics"]["recommended_action_type"] = next_best_action.get("action_type")
@@ -829,4 +831,3 @@ def build_user_state_summary_readonly(patient: Patient) -> Dict[str, Any]:
     Orchestration snapshot without creating onboarding rows. Use from GET-only endpoints (e.g. scorecard).
     """
     return build_user_state_summary(patient, readonly=True)
-

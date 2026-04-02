@@ -119,6 +119,30 @@ interface OrchestrationState {
     mood_trend_score?: number;
     mood_trend_direction?: string;
   };
+  lifestyle_insights?: {
+    version?: number;
+    top_signal?: {
+      key: string;
+      title: string;
+      severity: string;
+      summary: string;
+      recommendation: string;
+    } | null;
+    signals?: Array<{
+      key: string;
+      title: string;
+      severity: string;
+      summary: string;
+      recommendation: string;
+    }>;
+    recommendation_hints?: {
+      prefer_short_form?: boolean;
+      prefer_sleep_support?: boolean;
+      prefer_mood_tracking?: boolean;
+      prefer_low_friction_selfcare?: boolean;
+    };
+    supportive_copy?: string;
+  };
 }
 
 interface PatientCard {
@@ -304,6 +328,7 @@ const Dashboard: React.FC = () => {
     orchestration?.mood_trend?.recent_avg_mood != null
       ? `${orchestration.mood_trend.recent_avg_mood.toFixed(1)}/5 recent average`
       : 'No mood check saved recently';
+  const topLifestyleSignal = orchestration?.lifestyle_insights?.top_signal;
 
   const submitMoodCheck = async () => {
     if (selectedMood == null) {
@@ -569,6 +594,45 @@ const Dashboard: React.FC = () => {
         </div>
 
         <div className="space-y-6">
+          <div className={panel}>
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className={sectionLabel}>Lifestyle insight</p>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">What may be shaping your week</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className={`rounded-2xl border px-4 py-4 ${toneMap[topLifestyleSignal?.severity === 'high' ? 'warning' : 'neutral']}`}>
+                <p className="text-sm font-semibold text-slate-900">
+                  {topLifestyleSignal?.title || 'Build more day-to-day signal'}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-700">
+                  {topLifestyleSignal?.summary ||
+                    orchestration?.lifestyle_insights?.supportive_copy ||
+                    'Small patterns like sleep, stress, and consistency often shape how recovery feels between formal screenings.'}
+                </p>
+              </div>
+              <div className="grid gap-3">
+                {(orchestration?.lifestyle_insights?.signals || []).slice(0, 2).map((signal) => (
+                  <div key={signal.key} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-900">{signal.title}</p>
+                      <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] ${toneMap[signal.severity === 'high' ? 'warning' : 'neutral']}`}>
+                        {signal.severity}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{signal.recommendation}</p>
+                  </div>
+                ))}
+                {(!orchestration?.lifestyle_insights?.signals || orchestration.lifestyle_insights.signals.length === 0) && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                    <p className="text-sm text-slate-600">
+                      Save a few mood check-ins and keep up short self-care sessions to unlock better day-to-day guidance.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className={panel}>
             <div className="px-5 py-4 border-b border-slate-100">
               <p className={sectionLabel}>Daily signal</p>

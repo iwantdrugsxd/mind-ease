@@ -189,6 +189,24 @@ class OnboardingFlowTests(APITestCase):
 
     @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
     @patch("screening.firebase_auth.auth.verify_id_token", return_value={"uid": "uid-test"})
+    def test_state_includes_lifestyle_insights(self, *_mocks):
+        MoodEntry.objects.create(
+            patient=self.patient,
+            mood_level=2,
+            energy_level=2,
+            sleep_quality=2,
+            stress_level=4,
+            notes="Tired and stressed",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer good-token")
+        res = self.client.get("/api/screening/onboarding/state/")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("lifestyle_insights", res.data)
+        self.assertIn("supportive_copy", res.data["lifestyle_insights"])
+        self.assertIn("recommendation_hints", res.data["lifestyle_insights"])
+
+    @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
+    @patch("screening.firebase_auth.auth.verify_id_token", return_value={"uid": "uid-test"})
     def test_state_surfaces_elevated_risk_recommendation(self, *_mocks):
         PHQ9Screening.objects.create(
             patient=self.patient,

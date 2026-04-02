@@ -93,6 +93,7 @@ class SelfCarePathwayViewSet(viewsets.ReadOnlyModelViewSet):
             "reassessment": state.get("reassessment", {}),
             "next_best_action": state.get("next_best_action", {}),
             "readiness": state.get("readiness", {}),
+            "lifestyle_insights": state.get("lifestyle_insights", {}),
         })
 
 

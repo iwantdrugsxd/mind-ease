@@ -422,6 +422,7 @@ class ChatbotConversationViewSet(viewsets.ModelViewSet):
             "recommended_next_action": next_best_action.get("title") or recommendation.get("next_action"),
             "recommended_route": next_best_action.get("target_route"),
             "clinician_access_opt_in": bool((onboarding_state.get("consent") or {}).get("clinician_access_opt_in")),
+            "lifestyle_insights": onboarding_state.get("lifestyle_insights") or {},
         }
 
     def _format_guided_response(self, intro, actions=None, footer=None):
