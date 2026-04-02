@@ -4,6 +4,29 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
 import { Send, Bot, User, AlertCircle } from 'lucide-react';
 
+type AssistantGuidanceAction = {
+  label: string;
+  action_key: 'Go to Screening' | 'Open Self-Care' | 'Open Dashboard' | 'Open Care Team';
+  route: string;
+};
+
+type AssistantGuidance = {
+  policy_type: 'guided_support' | 'screening_prompt' | 'self_care_routing' | 'followup_recommended' | 'urgent_escalation' | 'out_of_scope';
+  urgency: 'routine' | 'elevated' | 'critical';
+  actions: AssistantGuidanceAction[];
+  safety_notice?: string | null;
+  handoff_recommended?: boolean;
+};
+
+type WorkflowState = {
+  workflow_type: 'guided_support' | 'screening' | 'self_care' | 'care_team_handoff' | 'urgent_escalation';
+  next_route?: string | null;
+  alert_id?: number | null;
+  referral_id?: number | null;
+  care_team_available?: boolean;
+  has_recent_screening?: boolean;
+};
+
 interface Message {
   id?: number;
   message_type: 'user' | 'bot';
@@ -12,13 +35,26 @@ interface Message {
   emotion_confidence?: number;
   risk_level?: string;
   created_at?: string;
+  assistant_guidance?: AssistantGuidance;
+  workflow_state?: WorkflowState;
 }
-
 interface Conversation {
   id: number;
   session_id: string;
   messages: Message[];
 }
+
+type ChatAction = {
+  label: string;
+  path: string;
+};
+
+const CHAT_ACTIONS: Record<string, ChatAction> = {
+  'Go to Screening': { label: 'Go to Screening', path: '/screening' },
+  'Open Self-Care': { label: 'Open Self-Care', path: '/selfcare' },
+  'Open Dashboard': { label: 'Open Dashboard', path: '/dashboard' },
+  'Open Care Team': { label: 'Open Care Team', path: '/care-team' },
+};
 
 const Chatbot: React.FC = () => {
   const { user } = useAuth();
@@ -194,6 +230,8 @@ const Chatbot: React.FC = () => {
             user_message: Message;
             bot_response: Message;
             emotional_context?: any;
+            assistant_guidance?: AssistantGuidance;
+            workflow_state?: WorkflowState;
           }>(
             `/screening/chatbot/conversations/${currentConversation.id}/send-message/`,
             { 
@@ -204,12 +242,17 @@ const Chatbot: React.FC = () => {
 
       console.log('Response received:', response.data);
 
-      const { user_message, bot_response } = response.data;
+      const { user_message, bot_response, assistant_guidance, workflow_state } = response.data;
+      const enrichedBotResponse: Message = {
+        ...bot_response,
+        assistant_guidance,
+        workflow_state,
+      };
       
       // Replace the temporary user message with the actual one from server
       setMessages(prev => {
         const filtered = prev.filter(m => m.message_type !== 'user' || m.content !== messageToSend);
-        return [...filtered, user_message, bot_response];
+        return [...filtered, user_message, enrichedBotResponse];
       });
 
       // Check for critical risk
@@ -238,6 +281,8 @@ const Chatbot: React.FC = () => {
             user_message: Message;
             bot_response: Message;
             emotional_context?: any;
+            assistant_guidance?: AssistantGuidance;
+            workflow_state?: WorkflowState;
           }>(
             `/screening/chatbot/conversations/${newConv.id}/send-message/`,
             {
@@ -246,10 +291,15 @@ const Chatbot: React.FC = () => {
             }
           );
 
-          const { user_message, bot_response } = retryRes.data;
+          const { user_message, bot_response, assistant_guidance, workflow_state } = retryRes.data;
+          const enrichedBotResponse: Message = {
+            ...bot_response,
+            assistant_guidance,
+            workflow_state,
+          };
           setMessages(prev => {
             const filtered = prev.filter(m => m.message_type !== 'user' || m.content !== messageToSend);
-            return [...filtered, user_message, bot_response];
+            return [...filtered, user_message, enrichedBotResponse];
           });
           return; // success after retry
         } catch (healErr: any) {
@@ -275,31 +325,31 @@ const Chatbot: React.FC = () => {
       <div className="flex flex-wrap gap-2 mt-3">
         <button 
           onClick={() => navigate('/screening')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full bg-primary-100 text-primary-700 hover:bg-primary-200 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
         >
           Go to Screening
         </button>
         <button 
           onClick={() => navigate('/dashboard')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full bg-primary-100 text-primary-700 hover:bg-primary-200 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
         >
           Open Dashboard
         </button>
         <button 
           onClick={() => navigate('/self-care')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full bg-primary-100 text-primary-700 hover:bg-primary-200 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
         >
           Self-Care Hub
         </button>
         <button 
           onClick={() => setInputMessage('start PHQ-9')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation font-medium"
         >
           PHQ-9
         </button>
         <button 
           onClick={() => setInputMessage('start GAD-7')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full bg-gray-200 text-gray-800 hover:bg-gray-300 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation font-medium"
         >
           GAD-7
         </button>
@@ -315,47 +365,110 @@ const Chatbot: React.FC = () => {
     }
   };
 
+  const renderMessageContent = (message: Message) => {
+    const lines = message.content.split('\n');
+    const fallbackActionKeys = lines
+      .map((line) => line.trim())
+      .filter((line) => /^\[[^\]]+\]$/.test(line))
+      .map((line) => line.slice(1, -1))
+      .filter((line): line is keyof typeof CHAT_ACTIONS => Boolean(CHAT_ACTIONS[line]));
+    const guidanceActions = message.assistant_guidance?.actions || [];
+    const actionKeys = guidanceActions.length > 0
+      ? guidanceActions.map((action) => action.action_key)
+      : fallbackActionKeys;
+    const textLines = lines.filter((line) => !/^\[[^\]]+\]$/.test(line.trim()));
+
+    return (
+      <div className="space-y-3">
+        <div className="space-y-1">
+          {message.assistant_guidance?.safety_notice ? (
+            <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              message.assistant_guidance.urgency === 'critical'
+                ? 'bg-rose-100 text-rose-700'
+                : 'bg-amber-100 text-amber-700'
+            }`}>
+              {message.assistant_guidance.safety_notice}
+            </div>
+          ) : null}
+          {textLines.map((line, idx) => (
+            <p key={idx} className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed">
+              {line || '\u00A0'}
+            </p>
+          ))}
+          {message.workflow_state?.workflow_type && message.message_type === 'bot' ? (
+            <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Workflow</div>
+              <div className="mt-1 text-sm font-medium text-slate-800">
+                {message.workflow_state.workflow_type === 'care_team_handoff' && 'Clinician follow-up is available in Care Team.'}
+                {message.workflow_state.workflow_type === 'screening' && 'A screening step is recommended next.'}
+                {message.workflow_state.workflow_type === 'self_care' && 'A self-care path is recommended next.'}
+                {message.workflow_state.workflow_type === 'urgent_escalation' && 'Urgent support steps were triggered.'}
+                {message.workflow_state.workflow_type === 'guided_support' && 'Guided in-app support is available.'}
+              </div>
+            </div>
+          ) : null}
+        </div>
+        {actionKeys.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {actionKeys.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => navigate(CHAT_ACTIONS[key].path)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  message.message_type === 'user'
+                    ? 'border border-white/20 bg-white/10 text-white hover:bg-white/20'
+                    : 'border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {CHAT_ACTIONS[key].label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   // Allow anonymous users for testing - removed the login requirement
 
   if (isInitializing) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[70vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Initializing chatbot...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 mx-auto mb-4"></div>
+          <p className="text-slate-600">Initializing chatbot...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 py-4 sm:py-8 px-2 sm:px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col border border-gray-200" style={{ height: 'calc(100vh - 4rem)', minHeight: '600px' }}>
-          {/* Header */}
-          <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white p-4 sm:p-5 shadow-md">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                  <Bot className="h-6 w-6 sm:h-7 sm:w-7" />
-                </div>
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_-18px_rgba(15,23,42,0.18)] flex flex-col" style={{ height: 'calc(100vh - 18rem)', minHeight: '620px' }}>
+        <div className="border-b border-slate-200 bg-slate-50/80 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
+                <Bot className="h-5 w-5" />
               </div>
-              <div className="ml-3 sm:ml-4">
-                <h2 className="text-lg sm:text-xl font-bold">MindEase Support Chatbot</h2>
-                <p className="text-xs sm:text-sm text-primary-100">AI-powered mental health support</p>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Conversation</p>
+                <h2 className="mt-1 text-lg sm:text-xl font-bold text-slate-950">MindEase Support Chatbot</h2>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-4 bg-gradient-to-b from-gray-50 to-white">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 md:p-6 space-y-4 bg-[linear-gradient(180deg,rgba(248,250,252,0.55),rgba(255,255,255,0.96))]">
             {messages.length === 0 ? (
-              <div className="text-center text-gray-500 py-12 sm:py-16">
-                <div className="h-16 w-16 sm:h-20 sm:w-20 mx-auto mb-4 rounded-full bg-primary-100 flex items-center justify-center">
-                  <Bot className="h-8 w-8 sm:h-10 sm:w-10 text-primary-600" />
+              <div className="text-center text-slate-500 py-12 sm:py-16">
+                <div className="h-16 w-16 sm:h-20 sm:w-20 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center">
+                  <Bot className="h-8 w-8 sm:h-10 sm:w-10 text-slate-700" />
                 </div>
-                <p className="text-base sm:text-lg font-medium">Start a conversation!</p>
-                <p className="text-sm sm:text-base mt-1">I'm here to support you.</p>
+                <p className="text-base sm:text-lg font-medium text-slate-900">Start a conversation</p>
+                <p className="text-sm sm:text-base mt-1 text-slate-600">I’m here to support you with guided check-ins and reflection.</p>
+                <QuickReplies />
               </div>
             ) : (
               messages.map((message, index) => (
@@ -367,8 +480,8 @@ const Chatbot: React.FC = () => {
                 >
                   {message.message_type === 'bot' && (
                     <div className="flex-shrink-0">
-                      <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center shadow-sm">
-                        <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+                      <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-2xl bg-slate-100 flex items-center justify-center shadow-sm">
+                        <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-slate-700" />
                       </div>
                     </div>
                   )}
@@ -376,13 +489,16 @@ const Chatbot: React.FC = () => {
                   <div
                     className={`max-w-[85%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl shadow-sm ${
                       message.message_type === 'user'
-                        ? 'bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-tr-sm'
-                        : 'bg-white text-gray-900 border border-gray-200 rounded-tl-sm'
+                        ? 'bg-slate-950 text-white rounded-tr-md'
+                        : 'bg-white text-slate-900 border border-slate-200 rounded-tl-md'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed">{message.content}</p>
+                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] opacity-60">
+                      {message.message_type === 'user' ? 'You' : 'Chatbot'}
+                    </div>
+                    {renderMessageContent(message)}
                     {message.message_type === 'user' && message.risk_level === 'critical' && (
-                      <div className="mt-2 flex items-center text-yellow-200 text-xs">
+                      <div className="mt-2 flex items-center text-amber-200 text-xs">
                         <AlertCircle className="h-3 w-3 mr-1" />
                         Critical risk detected
                       </div>
@@ -396,8 +512,8 @@ const Chatbot: React.FC = () => {
 
                   {message.message_type === 'user' && (
                     <div className="flex-shrink-0">
-                      <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 flex items-center justify-center shadow-sm">
-                        <User className="h-4 w-4 sm:h-5 sm:w-5 text-gray-600" />
+                      <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-2xl bg-slate-200 flex items-center justify-center shadow-sm">
+                        <User className="h-4 w-4 sm:h-5 sm:w-5 text-slate-600" />
                       </div>
                     </div>
                   )}
@@ -407,15 +523,15 @@ const Chatbot: React.FC = () => {
             {isLoading && (
               <div className="flex items-start justify-start gap-2 sm:gap-3">
                 <div className="flex-shrink-0">
-                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-full bg-gradient-to-br from-primary-100 to-primary-200 flex items-center justify-center shadow-sm">
-                    <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-primary-600" />
+                  <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-2xl bg-slate-100 flex items-center justify-center shadow-sm">
+                    <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-slate-700" />
                   </div>
                 </div>
-                <div className="bg-white text-gray-900 px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl rounded-tl-sm border border-gray-200 shadow-sm">
+                <div className="bg-white text-slate-900 px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl rounded-tl-md border border-slate-200 shadow-sm">
                   <div className="flex space-x-1.5">
-                    <div className="w-2 h-2 bg-primary-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                    <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                   </div>
                 </div>
               </div>
@@ -423,36 +539,38 @@ const Chatbot: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div className="border-t border-gray-200 p-3 sm:p-4 bg-white">
+          <div className="border-t border-slate-200 p-4 bg-white">
+            <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
+              Chatbot helps with reflection and guided support. For clinician follow-up or secure care communication, use Care Team separately.
+            </div>
             <div className="flex gap-2 sm:gap-3">
               <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder={conversation ? "Type your message..." : "Initializing chatbot..."}
-                className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none disabled:bg-gray-100 disabled:cursor-not-allowed text-sm sm:text-base"
+                className="flex-1 px-3 sm:px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent resize-none disabled:bg-slate-100 disabled:cursor-not-allowed text-sm sm:text-base"
                 rows={2}
                 disabled={isLoading || isInitializing}
               />
               <button
                 onClick={handleSendMessage}
                 disabled={!inputMessage.trim() || isLoading || isInitializing}
-                className="bg-gradient-to-r from-primary-600 to-primary-700 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-md hover:shadow-lg transition-all touch-manipulation"
+                className="bg-slate-950 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all touch-manipulation"
               >
                 <Send className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
-            <p className="text-xs text-gray-500 mt-2 px-1">
-              Press Enter to send, Shift+Enter for new line
-            </p>
-            <QuickReplies />
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs text-slate-500 px-1">
+                Press Enter to send, Shift+Enter for new line
+              </p>
+              {messages.length > 0 ? <QuickReplies /> : null}
+            </div>
           </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };
 
 export default Chatbot;
-

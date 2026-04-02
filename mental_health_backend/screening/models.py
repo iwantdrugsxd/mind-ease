@@ -17,6 +17,96 @@ class Patient(models.Model):
         return f"{self.user.first_name} {self.user.last_name}"
 
 
+class PatientProfile(models.Model):
+    """Basic profile captured during onboarding."""
+    GENDER_CHOICES = [
+        ('unspecified', 'Unspecified'),
+        ('male', 'Male'),
+        ('female', 'Female'),
+        ('nonbinary', 'Non-binary'),
+        ('prefer_not_say', 'Prefer not to say'),
+    ]
+
+    patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='profile')
+    preferred_name = models.CharField(max_length=100, blank=True)
+    birth_year = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(1900), MaxValueValidator(2100)])
+    gender = models.CharField(max_length=20, choices=GENDER_CHOICES, default='unspecified')
+    occupation = models.CharField(max_length=120, blank=True)
+    city = models.CharField(max_length=120, blank=True)
+
+    def __str__(self):
+        return f"Profile - {self.patient}"
+
+
+class PatientBaseline(models.Model):
+    """Baseline mental health metrics."""
+    LEVEL_CHOICES = [
+        (1, 'Very Low'),
+        (2, 'Low'),
+        (3, 'Moderate'),
+        (4, 'High'),
+        (5, 'Very High'),
+    ]
+
+    patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='baseline')
+    mood_baseline = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])
+    sleep_quality_baseline = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])
+    stress_level_baseline = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])
+    main_concerns = models.JSONField(default=list, blank=True)
+    goals = models.JSONField(default=list, blank=True)
+
+    def __str__(self):
+        return f"Baseline - {self.patient}"
+
+
+class PatientConsent(models.Model):
+    """Consent and disclaimers captured during onboarding."""
+    patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='consent')
+    data_usage_consent_given = models.BooleanField(default=False)
+    data_usage_consent_at = models.DateTimeField(null=True, blank=True)
+    emergency_disclaimer_acknowledged = models.BooleanField(default=False)
+    emergency_disclaimer_acknowledged_at = models.DateTimeField(null=True, blank=True)
+    clinician_access_opt_in = models.BooleanField(default=False)
+    consent_version = models.CharField(max_length=20, default='v1')
+
+    def __str__(self):
+        return f"Consent - {self.patient}"
+
+
+class PatientPreferences(models.Model):
+    """Lightweight preferences captured during onboarding."""
+    TIME_OF_DAY_CHOICES = [
+        ('morning', 'Morning'),
+        ('afternoon', 'Afternoon'),
+        ('evening', 'Evening'),
+        ('night', 'Night'),
+        ('unspecified', 'Unspecified'),
+    ]
+
+    patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='preferences')
+    preferred_time_of_day = models.CharField(max_length=20, choices=TIME_OF_DAY_CHOICES, default='unspecified')
+
+    def __str__(self):
+        return f"Preferences - {self.patient}"
+
+
+class PatientOnboardingStatus(models.Model):
+    """Tracks step-by-step onboarding completion."""
+    patient = models.OneToOneField(Patient, on_delete=models.CASCADE, related_name='onboarding_status')
+    account_step_completed = models.BooleanField(default=False)
+    profile_step_completed = models.BooleanField(default=False)
+    baseline_step_completed = models.BooleanField(default=False)
+    consent_step_completed = models.BooleanField(default=False)
+    assessment_offered = models.BooleanField(default=False)
+    assessment_completed = models.BooleanField(default=False)
+    advanced_step_completed = models.BooleanField(default=False)
+    onboarding_completed_at = models.DateTimeField(null=True, blank=True)
+    onboarding_version = models.CharField(max_length=20, default='v1')
+
+    def __str__(self):
+        return f"OnboardingStatus - {self.patient}"
+
+
 class PHQ9Screening(models.Model):
     SEVERITY_CHOICES = [
         ('minimal', 'Minimal'),

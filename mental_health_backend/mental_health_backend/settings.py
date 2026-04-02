@@ -29,7 +29,7 @@ SECRET_KEY = 'django-insecure-3e%xe)l(%mz-7(g5ev(jay)kl*jiv!e)ifm!akz=k%=w)43hou
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', 'mindcare-mental-health-a1a1f.web.app', 'mindcare-mental-health-a1a1f.firebaseapp.com']
+ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
 
 
 # Application definition
@@ -127,6 +127,9 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
@@ -134,21 +137,20 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'https://mindcare-mental-health-a1a1f.web.app',
-    'https://mindcare-mental-health-a1a1f.firebaseapp.com',
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
-# Allow all origins in development (for testing)
-# In production, use CORS_ALLOWED_ORIGINS above
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only allow all origins when DEBUG=True
+extra_cors = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
+if extra_cors:
+    CORS_ALLOWED_ORIGINS = list(dict.fromkeys(CORS_ALLOWED_ORIGINS + extra_cors))
 
 CORS_ALLOW_CREDENTIALS = True
 
 # REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'screening.firebase_auth.FirebaseAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [

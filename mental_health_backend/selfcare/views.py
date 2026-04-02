@@ -11,6 +11,8 @@ from .serializers import (SelfCareExerciseSerializer, SelfCarePathwaySerializer,
                          PatientSelfCareProgressSerializer, ExerciseCompletionSerializer,
                          MoodEntrySerializer, CoachCheckInSerializer, PatientMessageSerializer)
 from screening.models import Patient
+from screening.identity import get_or_create_patient_for_request, resolve_identity
+from screening.onboarding_service import build_initial_recommendation, build_user_state_summary
 
 
 class SelfCareExerciseViewSet(viewsets.ReadOnlyModelViewSet):
@@ -35,35 +37,63 @@ class SelfCarePathwayViewSet(viewsets.ReadOnlyModelViewSet):
     
     @action(detail=False, methods=['get'])
     def recommended(self, request):
-        # Get patient's latest screening scores to recommend appropriate pathways
         try:
-            patient = Patient.objects.get(user=request.user)
-            
-            # Get latest PHQ-9 and GAD-7 scores
-            latest_phq9 = patient.phq9_screenings.first()
-            latest_gad7 = patient.gad7_screenings.first()
-            
-            # Determine target severity level
-            if latest_phq9 and latest_gad7:
-                max_score = max(latest_phq9.total_score, latest_gad7.total_score)
-                if max_score >= 15:
-                    target_severity = 'severe'
-                elif max_score >= 10:
-                    target_severity = 'moderate'
-                elif max_score >= 5:
-                    target_severity = 'mild'
-                else:
-                    target_severity = 'minimal'
+            _, patient, _ = get_or_create_patient_for_request(request, allow_legacy_firebase_uid=False)
+            if not patient:
+                return Response([])
+
+            rec = build_initial_recommendation(patient)
+            risk_level = rec.get("risk_level", "low")
+            if risk_level in ("high", "critical"):
+                target_severity = "severe"
+            elif risk_level == "medium":
+                target_severity = "moderate"
             else:
-                target_severity = 'minimal'
-            
-            # Get recommended pathways
+                target_severity = "mild"
+
             pathways = self.queryset.filter(target_severity=target_severity)
+            if not pathways.exists():
+                pathways = self.queryset.filter(target_severity="minimal")
             serializer = self.get_serializer(pathways, many=True)
             return Response(serializer.data)
-            
-        except Patient.DoesNotExist:
-            return Response({'error': 'Patient not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception:
+            # Fallback for compatibility
+            serializer = self.get_serializer(self.queryset.filter(target_severity="minimal"), many=True)
+            return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='onboarding-recommended')
+    def onboarding_recommended(self, request):
+        _, patient, _ = get_or_create_patient_for_request(request, allow_legacy_firebase_uid=False)
+        if not patient:
+            return Response({"pathways": [], "recommendation": None, "recommended_exercises": [], "activity_summary": {}})
+        rec = build_initial_recommendation(patient)
+        state = build_user_state_summary(patient)
+        risk_level = rec.get("risk_level", "low")
+        if risk_level in ("high", "critical"):
+            target_severity = "severe"
+        elif risk_level == "medium":
+            target_severity = "moderate"
+        else:
+            target_severity = "mild"
+        pathways = self.queryset.filter(target_severity=target_severity)
+        if not pathways.exists():
+            pathways = self.queryset.filter(target_severity="minimal")
+        exercise_type_hint = rec.get("exercise_type_hint")
+        exercise_qs = SelfCareExercise.objects.filter(is_active=True)
+        if exercise_type_hint:
+            exercise_qs = exercise_qs.filter(exercise_type=exercise_type_hint)
+        recommended_exercises = exercise_qs.order_by("duration_minutes")[:6]
+        serializer = self.get_serializer(pathways, many=True)
+        return Response({
+            "pathways": serializer.data,
+            "recommendation": rec,
+            "recommended_exercises": SelfCareExerciseSerializer(recommended_exercises, many=True).data,
+            "activity_summary": state.get("activity", {}),
+            "continuity": state.get("continuity", {}),
+            "reassessment": state.get("reassessment", {}),
+            "next_best_action": state.get("next_best_action", {}),
+            "readiness": state.get("readiness", {}),
+        })
 
 
 class PatientSelfCareProgressViewSet(viewsets.ModelViewSet):
@@ -72,11 +102,15 @@ class PatientSelfCareProgressViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        patient = Patient.objects.get(user=self.request.user)
+        _, patient, _ = resolve_identity(self.request, allow_legacy_firebase_uid=False)
+        if not patient:
+            return PatientSelfCareProgress.objects.none()
         return PatientSelfCareProgress.objects.filter(patient=patient)
     
     def perform_create(self, serializer):
-        patient = Patient.objects.get(user=self.request.user)
+        _, patient, _ = get_or_create_patient_for_request(self.request, allow_legacy_firebase_uid=False)
+        if not patient:
+            raise serializers.ValidationError({'error': 'Unable to resolve patient'})
         serializer.save(patient=patient)
     
     @action(detail=True, methods=['post'])
@@ -119,86 +153,45 @@ class ExerciseCompletionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        patient = Patient.objects.get(user=self.request.user)
+        _, patient, _ = resolve_identity(self.request, allow_legacy_firebase_uid=False)
+        if not patient:
+            return ExerciseCompletion.objects.none()
         return ExerciseCompletion.objects.filter(patient=patient)
     
     def perform_create(self, serializer):
-        patient = Patient.objects.get(user=self.request.user)
+        _, patient, _ = get_or_create_patient_for_request(self.request, allow_legacy_firebase_uid=False)
+        if not patient:
+            raise serializers.ValidationError({'error': 'Unable to resolve patient'})
         serializer.save(patient=patient)
 
 
 class MoodEntryViewSet(viewsets.ModelViewSet):
     queryset = MoodEntry.objects.all()
     serializer_class = MoodEntrySerializer
-    permission_classes = []  # Allow unauthenticated for firebase_uid access
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        firebase_uid = self.request.query_params.get('firebase_uid')
-        if firebase_uid:
-            try:
-                patient = Patient.objects.get(firebase_uid=firebase_uid)
-                return MoodEntry.objects.filter(patient=patient).order_by('-created_at')
-            except Patient.DoesNotExist:
-                return MoodEntry.objects.none()
-        
-        if self.request.user.is_authenticated:
-            try:
-                patient = Patient.objects.get(user=self.request.user)
-                return MoodEntry.objects.filter(patient=patient).order_by('-created_at')
-            except Patient.DoesNotExist:
-                return MoodEntry.objects.none()
-        
+        _, patient, _ = resolve_identity(self.request, allow_legacy_firebase_uid=False)
+        if patient:
+            return MoodEntry.objects.filter(patient=patient).order_by('-created_at')
         return MoodEntry.objects.none()
     
     def create(self, request, *args, **kwargs):
         """Override create to handle patient creation and better error handling"""
-        from django.contrib.auth.models import User
         import logging
         
         logger = logging.getLogger(__name__)
         logger.info(f"Creating mood entry - User authenticated: {request.user.is_authenticated}, Data: {request.data}")
         
-        firebase_uid = request.data.get('firebase_uid', '')
-        
-        # Get or create patient
-        patient = None
-        if firebase_uid:
-            try:
-                patient = Patient.objects.get(firebase_uid=firebase_uid)
-                logger.info(f"Found existing patient: {patient.id}")
-            except Patient.DoesNotExist:
-                logger.info(f"Patient not found, creating new one for firebase_uid: {firebase_uid}")
-                # Create patient if doesn't exist
-                if request.user.is_authenticated:
-                    django_user = request.user
-                else:
-                    django_user, _ = User.objects.get_or_create(
-                        username=f'firebase_{firebase_uid}',
-                        defaults={
-                            'email': f'{firebase_uid}@firebase.local',
-                            'first_name': 'Firebase',
-                            'last_name': 'User'
-                        }
-                    )
-                patient, created = Patient.objects.get_or_create(
-                    firebase_uid=firebase_uid,
-                    defaults={'user': django_user}
-                )
-                logger.info(f"Patient {'created' if created else 'retrieved'}: {patient.id}")
-        elif request.user.is_authenticated:
-            try:
-                patient = Patient.objects.get(user=request.user)
-            except Patient.DoesNotExist:
-                patient, _ = Patient.objects.get_or_create(
-                    user=request.user,
-                    defaults={'firebase_uid': request.user.username}
-                )
+        _, patient, firebase_uid = get_or_create_patient_for_request(request, allow_legacy_firebase_uid=False)
+        if patient:
+            logger.info(f"Resolved patient {patient.id} for mood entry; firebase_uid={firebase_uid or 'n/a'}")
         
         if not patient:
             logger.error("No patient found or created")
             return Response(
-                {'error': 'firebase_uid or authentication required'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': 'Authenticated patient identity is required'},
+                status=status.HTTP_401_UNAUTHORIZED
             )
         
         # Prepare data for serializer (exclude firebase_uid as it's not a model field)
@@ -222,7 +215,6 @@ class MoodEntryViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def trends(self, request):
-        patient = Patient.objects.get(user=self.request.user)
         days = int(request.query_params.get('days', 30))
         
         start_date = timezone.now() - timedelta(days=days)
@@ -248,7 +240,9 @@ class CoachCheckInViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        patient = Patient.objects.get(user=self.request.user)
+        _, patient, _ = resolve_identity(self.request, allow_legacy_firebase_uid=False)
+        if not patient:
+            return CoachCheckIn.objects.none()
         return CoachCheckIn.objects.filter(patient=patient).order_by('-scheduled_date')
 
 
@@ -258,7 +252,9 @@ class PatientMessageViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        patient = Patient.objects.get(user=self.request.user)
+        _, patient, _ = resolve_identity(self.request, allow_legacy_firebase_uid=False)
+        if not patient:
+            return PatientMessage.objects.none()
         return PatientMessage.objects.filter(patient=patient).order_by('-sent_at')
     
     @action(detail=True, methods=['post'])
@@ -271,6 +267,8 @@ class PatientMessageViewSet(viewsets.ReadOnlyModelViewSet):
     
     @action(detail=False, methods=['get'])
     def unread_count(self, request):
-        patient = Patient.objects.get(user=self.request.user)
+        _, patient, _ = resolve_identity(self.request, allow_legacy_firebase_uid=False)
+        if not patient:
+            return Response({'unread_count': 0})
         count = PatientMessage.objects.filter(patient=patient, is_read=False).count()
         return Response({'unread_count': count})

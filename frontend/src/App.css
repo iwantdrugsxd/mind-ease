@@ -36,3 +36,372 @@
     transform: rotate(360deg);
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/* Clinician landing — scoped typography, motion, and decorative layers       */
+/* -------------------------------------------------------------------------- */
+
+.clinician-landing {
+  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes clinician-reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes clinician-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes clinician-blob-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(3%, -2%) scale(1.03);
+  }
+  66% {
+    transform: translate(-2%, 2%) scale(0.98);
+  }
+}
+
+@keyframes clinician-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.clinician-landing .clinician-reveal {
+  opacity: 0;
+  animation: clinician-reveal-up 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.clinician-landing .clinician-reveal-fade {
+  opacity: 0;
+  animation: clinician-fade-in 0.9s ease-out forwards;
+}
+
+.clinician-landing .clinician-delay-1 {
+  animation-delay: 0.08s;
+}
+.clinician-landing .clinician-delay-2 {
+  animation-delay: 0.16s;
+}
+.clinician-landing .clinician-delay-3 {
+  animation-delay: 0.24s;
+}
+.clinician-landing .clinician-delay-4 {
+  animation-delay: 0.32s;
+}
+.clinician-landing .clinician-delay-5 {
+  animation-delay: 0.4s;
+}
+
+.clinician-landing .clinician-stagger > *:nth-child(1) {
+  animation: clinician-reveal-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.05s forwards;
+  opacity: 0;
+}
+.clinician-landing .clinician-stagger > *:nth-child(2) {
+  animation: clinician-reveal-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.12s forwards;
+  opacity: 0;
+}
+.clinician-landing .clinician-stagger > *:nth-child(3) {
+  animation: clinician-reveal-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.19s forwards;
+  opacity: 0;
+}
+.clinician-landing .clinician-stagger > *:nth-child(4) {
+  animation: clinician-reveal-up 0.65s cubic-bezier(0.22, 1, 0.36, 1) 0.26s forwards;
+  opacity: 0;
+}
+
+.clinician-landing .clinician-blob {
+  animation: clinician-blob-drift 18s ease-in-out infinite;
+}
+
+.clinician-landing .clinician-blob-slow {
+  animation: clinician-blob-drift 24s ease-in-out infinite reverse;
+}
+
+.clinician-landing .clinician-shimmer-bar {
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.06) 0%,
+    rgba(14, 165, 233, 0.12) 50%,
+    rgba(15, 23, 42, 0.06) 100%
+  );
+  background-size: 200% 100%;
+  animation: clinician-shimmer 8s linear infinite;
+}
+
+.clinician-landing .clinician-card-hover {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease, border-color 0.25s ease;
+}
+
+.clinician-landing .clinician-card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 40px -12px rgba(15, 23, 42, 0.15);
+}
+
+.clinician-landing .clinician-btn-primary {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.clinician-landing .clinician-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px -8px rgba(15, 23, 42, 0.35);
+}
+.clinician-landing .clinician-btn-primary:active {
+  transform: translateY(0);
+}
+
+.clinician-landing .clinician-btn-ghost {
+  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+.clinician-landing .clinician-btn-ghost:hover {
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clinician-landing .clinician-reveal,
+  .clinician-landing .clinician-reveal-fade,
+  .clinician-landing .clinician-stagger > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .clinician-landing .clinician-blob,
+  .clinician-landing .clinician-blob-slow,
+  .clinician-landing .clinician-shimmer-bar {
+    animation: none !important;
+  }
+  .clinician-landing .clinician-card-hover:hover {
+    transform: none;
+  }
+  .clinician-landing .clinician-btn-primary:hover,
+  .clinician-landing .clinician-btn-ghost:hover {
+    transform: none;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Clinician app — auth + console unified system                               */
+/* -------------------------------------------------------------------------- */
+
+.clinician-app,
+.clinician-console {
+  font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  --clin-radius: 12px;
+  --clin-radius-lg: 16px;
+}
+
+@keyframes clinician-auth-blob {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(1) translate(0, 0);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.05) translate(-2%, 2%);
+  }
+}
+
+@keyframes clinician-auth-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes clinician-console-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes clinician-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.clinician-auth-blob {
+  animation: clinician-auth-blob 14s ease-in-out infinite;
+}
+
+.clinician-auth-blob-delay {
+  animation: clinician-auth-blob 18s ease-in-out infinite reverse;
+}
+
+.clinician-auth-enter {
+  animation: clinician-auth-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.clin-auth-card {
+  transition: box-shadow 0.3s ease, border-color 0.2s ease;
+}
+
+.clin-auth-card:focus-within {
+  box-shadow: 0 24px 56px -20px rgba(15, 23, 42, 0.18);
+}
+
+.clinician-console-content {
+  animation: clinician-console-content-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.clinician-skeleton-pulse > * {
+  animation: clinician-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.clinician-skeleton-pulse > *:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.clinician-skeleton-pulse > *:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clinician-auth-blob,
+  .clinician-auth-blob-delay {
+    animation: none;
+    opacity: 0.4;
+  }
+  .clinician-auth-enter,
+  .clinician-console-content {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .clinician-skeleton-pulse > * {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+.clinician-stat-grid .clinician-stat-card {
+  animation: clinician-console-content-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+.clinician-stat-grid .clinician-stat-card:nth-child(1) {
+  animation-delay: 0.04s;
+}
+.clinician-stat-grid .clinician-stat-card:nth-child(2) {
+  animation-delay: 0.08s;
+}
+.clinician-stat-grid .clinician-stat-card:nth-child(3) {
+  animation-delay: 0.12s;
+}
+.clinician-stat-grid .clinician-stat-card:nth-child(4) {
+  animation-delay: 0.16s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clinician-stat-grid .clinician-stat-card {
+    animation: none;
+  }
+}
+
+/* Clinician console — main column texture (does not affect .clinician-landing) */
+.clinician-console-main {
+  background-color: rgba(241, 245, 249, 0.55);
+  background-image: radial-gradient(circle at 1px 1px, rgba(15, 23, 42, 0.035) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .clinician-console-stack > * {
+    animation: clinician-console-content-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  .clinician-console-stack > *:nth-child(1) {
+    animation-delay: 0.02s;
+  }
+  .clinician-console-stack > *:nth-child(2) {
+    animation-delay: 0.06s;
+  }
+  .clinician-console-stack > *:nth-child(3) {
+    animation-delay: 0.1s;
+  }
+  .clinician-console-stack > *:nth-child(4) {
+    animation-delay: 0.14s;
+  }
+  .clinician-console-stack > *:nth-child(5) {
+    animation-delay: 0.18s;
+  }
+  .clinician-console-stack > *:nth-child(6) {
+    animation-delay: 0.22s;
+  }
+
+  .clinician-internal-intro {
+    animation: clinician-console-content-in 0.38s ease-out backwards;
+  }
+
+  .clinician-triage-row {
+    transition:
+      background-color 0.18s ease,
+      box-shadow 0.22s ease;
+  }
+
+  tbody .clinician-triage-row:hover {
+    box-shadow: inset 3px 0 0 0 rgba(14, 116, 144, 0.45);
+  }
+
+  .clinician-alert-row {
+    transition:
+      background-color 0.18s ease,
+      box-shadow 0.22s ease;
+  }
+
+  .clinician-alert-row:hover {
+    box-shadow: inset 3px 0 0 0 rgba(14, 116, 144, 0.38);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clinician-console-stack > * {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .clinician-internal-intro {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  tbody .clinician-triage-row:hover {
+    box-shadow: none;
+  }
+
+  .clinician-alert-row:hover {
+    box-shadow: none;
+  }
+}

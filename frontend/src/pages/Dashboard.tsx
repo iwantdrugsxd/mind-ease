@@ -1,7 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { BarChart3, TrendingUp, AlertTriangle, Calendar, Activity, Heart, User, Clock, Mail } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  Calendar,
+  Activity,
+  User,
+  ArrowRight,
+  Sparkles,
+  Shield,
+  MessageCircle,
+  HeartHandshake,
+  SmilePlus,
+} from 'lucide-react';
 import api from '../utils/api';
+import { fetchPatientCareTeamSummary } from '../utils/clinicianApi';
+import { subscribeConsultationRefresh } from '../utils/consultationRefreshBus';
+import { useRefreshOnWindowFocus } from '../hooks/useRefreshOnWindowFocus';
+import { useAuthenticatedEventStream } from '../hooks/useAuthenticatedEventStream';
 
 interface DashboardStats {
   totalScreenings: number;
@@ -10,6 +25,100 @@ interface DashboardStats {
   moodTrend: number;
   lastScreening: string;
   riskLevel: string;
+  moodTrendDirection?: string;
+}
+
+interface OrchestrationState {
+  patient?: {
+    id: number;
+    firebase_uid: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+    created_at: string;
+    updated_at: string;
+    emergency_contact?: string;
+    emergency_phone?: string;
+  };
+  onboarding_complete: boolean;
+  resume_step: string;
+  next_route: string;
+  onboarding?: any;
+  latest_assessment?: {
+    has_assessment: boolean;
+    risk_level: string | null;
+    severity_level: string | null;
+    total_score: number | null;
+    created_at: string | null;
+  };
+  recommendation?: {
+    next_action: string;
+    message: string;
+    emphasize_professional_support: boolean;
+    clinician_priority: boolean;
+    pathway_hint: string;
+    emphasize_consistency?: boolean;
+    emphasize_reassessment?: boolean;
+  };
+  activity?: {
+    last_activity_at?: string | null;
+    days_since_last_activity?: number | null;
+    recent_activity_count?: number;
+    weekly_activity_count?: number;
+    engagement_level?: string;
+    streak_days?: number;
+    no_recent_activity?: boolean;
+    is_drifting?: boolean;
+    has_started_selfcare?: boolean;
+    has_recent_mood_tracking?: boolean;
+  };
+  mood_trend?: {
+    has_enough_data: boolean;
+    trend_direction: string;
+    trend_score: number;
+    recent_avg_mood: number | null;
+    prior_avg_mood: number | null;
+    entry_count_30d: number;
+  };
+  consent?: { clinician_access_opt_in?: boolean };
+  next_actions?: {
+    suggested_next_screening_at?: string | null;
+    take_screening_now?: boolean;
+    open_selfcare_now?: boolean;
+  };
+  reassessment?: {
+    reassessment_due?: boolean;
+    reassessment_recommended_soon?: boolean;
+    reassessment_priority?: string;
+    days_since_last_assessment?: number | null;
+    recommended_reassessment_type?: string;
+    reason?: string;
+  };
+  next_best_action?: {
+    action_type?: string;
+    title?: string;
+    description?: string;
+    target_route?: string;
+    urgency?: string;
+    reason?: string;
+  };
+  readiness?: {
+    candidate_for_guided_plan?: boolean;
+    candidate_for_clinician_review?: boolean;
+    high_engagement_user?: boolean;
+    high_risk_no_followup?: boolean;
+    needs_reengagement?: boolean;
+  };
+  recent_activity?: Array<{ type: string; label: string; timestamp: string | null }>;
+  dashboard_stats?: {
+    total_screenings: number;
+    high_risk_alerts: number;
+    completed_exercises: number;
+    last_screening: string | null;
+    risk_level: string;
+    mood_trend_score?: number;
+    mood_trend_direction?: string;
+  };
 }
 
 interface PatientCard {
@@ -24,6 +133,12 @@ interface PatientCard {
   };
 }
 
+const panel =
+  'rounded-2xl border border-slate-200/90 bg-white/95 shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_-18px_rgba(15,23,42,0.18)] backdrop-blur-sm';
+const panelMuted = 'rounded-2xl border border-slate-200/80 bg-slate-50/90 shadow-sm';
+const sectionLabel = 'text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500';
+const textMuted = 'text-sm text-slate-600';
+
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({
@@ -32,85 +147,116 @@ const Dashboard: React.FC = () => {
     completedExercises: 0,
     moodTrend: 0,
     lastScreening: '',
-    riskLevel: 'low'
+    riskLevel: 'low',
+    moodTrendDirection: 'unknown',
   });
   const [patientCard, setPatientCard] = useState<PatientCard | null>(null);
+  const [orchestration, setOrchestration] = useState<OrchestrationState | null>(null);
+  const [careTeamSummary, setCareTeamSummary] = useState<{
+    activeCount: number;
+    unreadCount: number;
+    replyRequestedCount: number;
+    scheduledFollowups: number;
+    unreadNotifications: number;
+    latestNotificationTitle: string;
+  }>({
+    activeCount: 0,
+    unreadCount: 0,
+    replyRequestedCount: 0,
+    scheduledFollowups: 0,
+    unreadNotifications: 0,
+    latestNotificationTitle: '',
+  });
   const [loading, setLoading] = useState(true);
+  const [selectedMood, setSelectedMood] = useState<number | null>(null);
+  const [moodNotes, setMoodNotes] = useState('');
+  const [moodSaving, setMoodSaving] = useState(false);
+  const [moodFeedback, setMoodFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+
+  const refreshCareTeamSummary = useCallback(async () => {
+    try {
+      const summary = await fetchPatientCareTeamSummary();
+      setCareTeamSummary({
+        activeCount: summary.active_conversations,
+        unreadCount: summary.unread_clinician_messages,
+        replyRequestedCount: summary.reply_requested_count,
+        scheduledFollowups: summary.scheduled_followups,
+        unreadNotifications: summary.unread_notifications,
+        latestNotificationTitle: summary.latest_notification_title,
+      });
+    } catch {
+      setCareTeamSummary({
+        activeCount: 0,
+        unreadCount: 0,
+        replyRequestedCount: 0,
+        scheduledFollowups: 0,
+        unreadNotifications: 0,
+        latestNotificationTitle: '',
+      });
+    }
+  }, []);
 
   useEffect(() => {
-    const loadDashboardData = async () => {
+    return subscribeConsultationRefresh('patient', () => void refreshCareTeamSummary());
+  }, [refreshCareTeamSummary]);
+
+  useRefreshOnWindowFocus(() => void refreshCareTeamSummary(), { debounceMs: 1200 });
+  useAuthenticatedEventStream('/clinician/patient/me/care-team-events/', {
+    onUpdate: () => void refreshCareTeamSummary(),
+  });
+
+  const loadDashboardData = useCallback(async () => {
+    try {
+      let stateData: OrchestrationState | null = null;
       try {
-        // Load patient card
-        if (user?.id) {
-          try {
-            // Include firebase_uid in query params to fetch the correct patient
-            const patientResponse = await api.get<{
-              count: number;
-              results: PatientCard[];
-            }>(`/screening/patients/?firebase_uid=${encodeURIComponent(user.id)}`);
-            if (patientResponse.data && patientResponse.data.results && patientResponse.data.results.length > 0) {
-              setPatientCard(patientResponse.data.results[0]);
-            } else {
-              // If no patient found, try to create one
-              try {
-                const createResponse = await api.post<PatientCard>('/screening/patients/', {
-                  firebase_uid: user.id
-                });
-                setPatientCard(createResponse.data);
-              } catch (createError) {
-                console.warn('Could not create patient card:', createError);
-              }
-            }
-          } catch (error) {
-            console.warn('Could not load patient card:', error);
-            // Try to create patient card if loading fails
-            try {
-              const createResponse = await api.post<PatientCard>('/screening/patients/', {
-                firebase_uid: user.id
-              });
-              setPatientCard(createResponse.data);
-            } catch (createError) {
-              console.warn('Could not create patient card:', createError);
-            }
-          }
-        }
-
-        // Simulate loading other stats
-        setTimeout(() => {
-          setStats({
-            totalScreenings: 12,
-            highRiskAlerts: 2,
-            completedExercises: 8,
-            moodTrend: 15,
-            lastScreening: new Date().toLocaleDateString(),
-            riskLevel: 'medium'
+        const stateRes = await api.get<OrchestrationState>('/screening/onboarding/state/');
+        stateData = stateRes.data;
+        setOrchestration(stateData);
+        if (stateData?.patient) {
+          setPatientCard({
+            id: stateData.patient.id,
+            firebase_uid: stateData.patient.firebase_uid,
+            created_at: stateData.patient.created_at,
+            updated_at: stateData.patient.updated_at,
+            user: {
+              email: stateData.patient.email,
+              first_name: stateData.patient.first_name,
+              last_name: stateData.patient.last_name,
+            },
           });
-          setLoading(false);
-        }, 1000);
-      } catch (error) {
-        console.error('Error loading dashboard:', error);
-        setLoading(false);
+        }
+      } catch {
+        setOrchestration(null);
       }
-    };
-
-    loadDashboardData();
-  }, [user]);
-
-  const getRiskColor = (riskLevel: string) => {
-    switch (riskLevel) {
-      case 'critical': return 'text-red-600 bg-red-100';
-      case 'high': return 'text-orange-600 bg-orange-100';
-      case 'medium': return 'text-yellow-600 bg-yellow-100';
-      default: return 'text-green-600 bg-green-100';
+      await refreshCareTeamSummary();
+      const ds = (stateData as any)?.dashboard_stats;
+      const risk = stateData?.latest_assessment?.risk_level || ds?.risk_level || 'low';
+      setStats({
+        totalScreenings: Number(ds?.total_screenings || 0),
+        highRiskAlerts: Number(ds?.high_risk_alerts || 0),
+        completedExercises: Number(ds?.completed_exercises || 0),
+        moodTrend: Math.round(Number(ds?.mood_trend_score || 0) * 20),
+        lastScreening: ds?.last_screening ? new Date(ds.last_screening).toLocaleDateString() : '',
+        riskLevel: risk,
+        moodTrendDirection: String(ds?.mood_trend_direction || 'unknown'),
+      });
+    } catch (error) {
+      console.error('Error loading dashboard:', error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [refreshCareTeamSummary]);
+
+  useEffect(() => {
+    void loadDashboardData();
+  }, [user, loadDashboardData]);
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Please log in to access dashboard</h2>
-          <p className="text-gray-600">You need to be logged in to view your personal dashboard.</p>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Please log in to access dashboard</h2>
+          <p className="text-slate-600">You need to be logged in to view your personal dashboard.</p>
         </div>
       </div>
     );
@@ -118,280 +264,534 @@ const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[70vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 mx-auto" />
+          <p className="mt-4 text-slate-600">Loading your dashboard…</p>
         </div>
       </div>
     );
   }
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return 'N/A';
+  const displayName =
+    patientCard?.user?.first_name?.trim() ||
+    user.name ||
+    'there';
+  const careAttention =
+    careTeamSummary.unreadCount +
+    careTeamSummary.replyRequestedCount +
+    careTeamSummary.unreadNotifications;
+  const primaryActionHref = orchestration?.next_best_action?.target_route || '/screening';
+  const primaryActionLabel = orchestration?.next_best_action?.title || 'Take a screening';
+  const reassessmentState = orchestration?.reassessment?.reassessment_due
+    ? 'Due now'
+    : orchestration?.reassessment?.reassessment_recommended_soon
+      ? 'Recommended soon'
+      : 'On track';
+  const engagementState = capitalize(orchestration?.activity?.engagement_level || 'low');
+  const lastActiveLabel = orchestration?.activity?.last_activity_at
+    ? new Date(orchestration.activity.last_activity_at).toLocaleDateString()
+    : 'No recent activity';
+  const nextScreeningLabel = orchestration?.next_actions?.suggested_next_screening_at
+    ? new Date(orchestration.next_actions.suggested_next_screening_at).toLocaleDateString()
+    : 'Recommended now';
+  const careStatusLabel =
+    careAttention > 0
+      ? `${careAttention} item${careAttention === 1 ? '' : 's'} need attention`
+      : 'No pending outreach';
+  const recentTimeline = orchestration?.recent_activity || [];
+  const currentMoodLabel =
+    orchestration?.mood_trend?.recent_avg_mood != null
+      ? `${orchestration.mood_trend.recent_avg_mood.toFixed(1)}/5 recent average`
+      : 'No mood check saved recently';
+
+  const submitMoodCheck = async () => {
+    if (selectedMood == null) {
+      setMoodFeedback({ tone: 'error', message: 'Choose how you are feeling before saving today’s check-in.' });
+      return;
+    }
+    setMoodSaving(true);
+    setMoodFeedback(null);
     try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+      await api.post('/selfcare/mood-entries/', {
+        mood_level: selectedMood,
+        notes: moodNotes,
+        energy_level: 3,
+        sleep_quality: 3,
+        stress_level: selectedMood <= 2 ? 4 : selectedMood >= 4 ? 2 : 3,
       });
-    } catch {
-      return dateString;
+      setMoodFeedback({ tone: 'success', message: 'Mood check saved. Your recommendations and continuity signals are updating.' });
+      setMoodNotes('');
+      setSelectedMood(null);
+      await loadDashboardData();
+    } catch (error: any) {
+      setMoodFeedback({
+        tone: 'error',
+        message:
+          error?.response?.data?.error ||
+          error?.response?.data?.detail ||
+          error?.message ||
+          'Could not save your mood check right now.',
+      });
+    } finally {
+      setMoodSaving(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 py-6 sm:py-8 px-2 sm:px-4">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Welcome back, {user.name}!</h1>
-          <p className="text-base sm:text-lg text-gray-600 mt-2">Here's an overview of your mental health journey.</p>
-        </div>
-
-        {/* Patient Card Section */}
-        {patientCard && (
-          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 mb-6 sm:mb-8 border border-gray-200">
-            <div className="flex items-start justify-between flex-wrap gap-4">
-              <div className="flex items-start gap-4">
-                <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-full bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center shadow-md">
-                  <User className="h-6 w-6 sm:h-8 sm:w-8 text-white" />
+    <div className="space-y-6 lg:space-y-8">
+      <section className={`${panel} overflow-hidden`}>
+        <div className="h-1.5 w-full bg-gradient-to-r from-slate-950 via-slate-700 to-slate-400" />
+        <div className="p-5 sm:p-6 lg:p-7">
+          <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
+            <div className="space-y-6">
+              <div className="flex items-start gap-4 sm:gap-5">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-900/20 ring-1 ring-slate-800/10">
+                  <User className="h-6 w-6" />
                 </div>
-                <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">
-                    {patientCard.user?.first_name || user.name} {patientCard.user?.last_name || ''}
-                  </h3>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
-                    <Mail className="h-4 w-4" />
-                    <span>{patientCard.user?.email || user.email}</span>
+                <div className="min-w-0">
+                  <p className={sectionLabel}>Patient Workspace</p>
+                  <h2 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-950">
+                    Welcome back, {displayName}
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm sm:text-[15px] leading-relaxed text-slate-600">
+                    A single view of your screening status, care-team follow-up, and day-to-day recovery momentum.
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <StatusPill label={`Risk: ${labelForRisk(stats.riskLevel)}`} tone={riskTone(stats.riskLevel)} />
+                    <StatusPill label={`Engagement: ${engagementState}`} tone="neutral" />
+                    <StatusPill
+                      label={careTeamSummary.activeCount > 0 ? 'Care team active' : 'Care team quiet'}
+                      tone={careAttention > 0 ? 'primary' : 'neutral'}
+                    />
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs sm:text-sm text-gray-500">
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      <span>Created: {formatDate(patientCard.created_at)}</span>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <MetricTile
+                  label="Current risk"
+                  value={labelForRisk(stats.riskLevel)}
+                  caption={orchestration?.latest_assessment?.severity_level?.replace(/_/g, ' ') || 'Assessment-driven'}
+                  tone={riskTone(stats.riskLevel)}
+                  icon={<Shield className="h-4 w-4" />}
+                />
+                <MetricTile
+                  label="Care team"
+                  value={careTeamSummary.activeCount ? `${careTeamSummary.activeCount}` : 'Quiet'}
+                  caption={careStatusLabel}
+                  tone={careAttention > 0 ? 'primary' : 'neutral'}
+                  icon={<HeartHandshake className="h-4 w-4" />}
+                />
+                <MetricTile
+                  label="Engagement"
+                  value={engagementState}
+                  caption={`Streak ${orchestration?.activity?.streak_days || 0} day${(orchestration?.activity?.streak_days || 0) === 1 ? '' : 's'}`}
+                  tone="neutral"
+                  icon={<Activity className="h-4 w-4" />}
+                />
+                <MetricTile
+                  label="Reassessment"
+                  value={reassessmentState}
+                  caption={`Next screening ${nextScreeningLabel}`}
+                  tone={orchestration?.reassessment?.reassessment_due ? 'warning' : 'neutral'}
+                  icon={<Calendar className="h-4 w-4" />}
+                />
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
+                  <p className={sectionLabel}>Next Step</p>
+                  <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">{primaryActionLabel}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                    {orchestration?.next_best_action?.description ||
+                      orchestration?.recommendation?.message ||
+                      'Take the next recommended step to keep your care plan current.'}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Link
+                      to={primaryActionHref}
+                      className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-px hover:bg-slate-900"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {primaryActionLabel}
+                    </Link>
+                    <Link
+                      to="/selfcare"
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-all hover:-translate-y-px hover:bg-slate-50"
+                    >
+                      <Activity className="h-4 w-4 text-slate-500" />
+                      Continue self-care
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className={sectionLabel}>Care Team</p>
+                      <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">Communication status</h3>
                     </div>
-                    {patientCard.updated_at !== patientCard.created_at && (
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                        <span>Updated: {formatDate(patientCard.updated_at)}</span>
-                      </div>
-                    )}
+                    <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                      {careTeamSummary.activeCount} active
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-3 gap-3">
+                    <MiniStat label="Unread" value={String(careTeamSummary.unreadCount)} />
+                    <MiniStat label="Reply" value={String(careTeamSummary.replyRequestedCount)} />
+                    <MiniStat label="Scheduled" value={String(careTeamSummary.scheduledFollowups)} />
+                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-slate-600">
+                    {careTeamSummary.latestNotificationTitle ||
+                      'Messages from your clinician or care team will appear here when follow-up starts.'}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Link
+                      to="/care-team"
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-px hover:bg-slate-900"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Open Care Team
+                    </Link>
+                    <Link
+                      to="/chatbot"
+                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-all hover:-translate-y-px hover:bg-slate-50"
+                    >
+                      <MessageCircle className="h-4 w-4 text-slate-500" />
+                      Use Chatbot
+                    </Link>
                   </div>
                 </div>
               </div>
-              <div className="px-3 py-1.5 bg-primary-100 text-primary-700 rounded-full text-xs sm:text-sm font-medium">
-                Patient ID: {patientCard.id}
+            </div>
+
+            <div className={`${panelMuted} p-4 sm:p-5`}>
+              <p className={sectionLabel}>Need-to-know</p>
+              <div className="mt-4 grid gap-3">
+                <StateRow label="Current risk" value={labelForRisk(stats.riskLevel)} />
+                <StateRow label="Last screening" value={stats.lastScreening || 'No screening yet'} />
+                <StateRow label="Last active" value={lastActiveLabel} />
+                <StateRow label="Care team" value={careTeamSummary.activeCount > 0 ? 'Follow-up active' : 'No active outreach'} />
+              </div>
+              <div className="pt-4 mt-4 border-t border-slate-200/80">
+                <div className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-bold text-white">
+                  Patient ID: {patientCard?.id ?? '—'}
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      </section>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 sm:p-6 border border-gray-100">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-primary-100 flex items-center justify-center">
-                  <BarChart3 className="h-5 w-5 sm:h-6 sm:w-6 text-primary-600" />
-                </div>
-              </div>
-              <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-500">Total Screenings</p>
-                <p className="text-xl sm:text-2xl font-semibold text-gray-900">{stats.totalScreenings}</p>
-              </div>
+      <OnboardingCta orchestration={orchestration} />
+
+      {(orchestration?.readiness?.high_risk_no_followup ||
+        orchestration?.activity?.is_drifting ||
+        orchestration?.recommendation?.emphasize_professional_support) && (
+        <section className="grid gap-3">
+          {orchestration?.readiness?.high_risk_no_followup ? (
+            <SignalBanner
+              tone="danger"
+              title="Follow-up is recommended"
+              body="Your recent elevated-risk results have not had enough follow-up activity yet. A reassessment and support-oriented next step are recommended."
+            />
+          ) : null}
+          {orchestration?.activity?.is_drifting ? (
+            <SignalBanner
+              tone="warning"
+              title="Your momentum has slowed"
+              body="A short self-care session can help you rebuild consistency without taking much time."
+            />
+          ) : null}
+          {orchestration?.recommendation?.emphasize_professional_support ? (
+            <SignalBanner
+              tone="danger"
+              title="Professional support may help"
+              body="If you feel unsafe, contact local emergency services or crisis support immediately. Care Team can also help you continue follow-up inside the app."
+            />
+          ) : null}
+        </section>
+      )}
+
+      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="space-y-6">
+          <div className={panel}>
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className={sectionLabel}>Action Board</p>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">Core actions</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              <ActionRow
+                href={primaryActionHref}
+                title={primaryActionLabel}
+                description={orchestration?.next_best_action?.description || orchestration?.recommendation?.message || 'Take the next recommended step to keep your plan current.'}
+                tone="primary"
+              />
+              <ActionRow
+                href="/care-team"
+                title="Open Care Team"
+                description="Read messages, review follow-up, and reply if your clinician has reached out."
+                tone="care"
+              />
+              <ActionRow
+                href="/selfcare"
+                title="Continue self-care"
+                description="Open guided exercises and short routines matched to your current state."
+                tone="neutral"
+              />
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 sm:p-6 border border-gray-100">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-orange-100 flex items-center justify-center">
-                  <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
-                </div>
-              </div>
-              <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-500">High Risk Alerts</p>
-                <p className="text-xl sm:text-2xl font-semibold text-gray-900">{stats.highRiskAlerts}</p>
-              </div>
+          <div className={panel}>
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className={sectionLabel}>Timeline</p>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">Recent activity</h3>
             </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 sm:p-6 border border-gray-100">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-green-100 flex items-center justify-center">
-                  <Activity className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-                </div>
-              </div>
-              <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-500">Exercises Completed</p>
-                <p className="text-xl sm:text-2xl font-semibold text-gray-900">{stats.completedExercises}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow p-4 sm:p-6 border border-gray-100">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-                </div>
-              </div>
-              <div className="ml-3 sm:ml-4">
-                <p className="text-xs sm:text-sm font-medium text-gray-500">Mood Improvement</p>
-                <p className="text-xl sm:text-2xl font-semibold text-gray-900">+{stats.moodTrend}%</p>
+            <div className="p-5">
+              <div className="space-y-4">
+                {recentTimeline.map((activity, idx) => (
+                  <div key={`${activity.type}-${idx}`} className="flex items-start gap-3">
+                    <div className="mt-1 h-2.5 w-2.5 rounded-full bg-slate-900 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{activity.label}</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {activity.timestamp ? new Date(activity.timestamp).toLocaleDateString() : 'Recent activity'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {recentTimeline.length === 0 && (
+                  <p className={textMuted}>No recent activity yet.</p>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-          {/* Risk Assessment */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 border border-gray-200">
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Current Risk Assessment</h3>
-              
-              <div className="mb-4 sm:mb-6">
-                <div className="flex items-center justify-between mb-2 sm:mb-3">
-                  <span className="text-sm sm:text-base font-medium text-gray-700">Risk Level</span>
-                  <span className={`px-3 py-1.5 rounded-full text-xs sm:text-sm font-medium ${getRiskColor(stats.riskLevel)}`}>
-                    {stats.riskLevel.charAt(0).toUpperCase() + stats.riskLevel.slice(1)}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5 sm:h-3">
-                  <div 
-                    className={`h-2.5 sm:h-3 rounded-full transition-all duration-500 ${
-                      stats.riskLevel === 'critical' ? 'bg-red-500' :
-                      stats.riskLevel === 'high' ? 'bg-orange-500' :
-                      stats.riskLevel === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+        <div className="space-y-6">
+          <div className={panel}>
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className={sectionLabel}>Daily signal</p>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">Quick mood check</h3>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-sm font-semibold text-slate-900">{currentMoodLabel}</p>
+                <p className="mt-1 text-sm text-slate-600">
+                  A lightweight daily check-in improves decline detection between formal screenings.
+                </p>
+              </div>
+              <div className="grid grid-cols-5 gap-2">
+                {[
+                  { value: 1, label: 'Very low', emoji: '😟' },
+                  { value: 2, label: 'Low', emoji: '😕' },
+                  { value: 3, label: 'Okay', emoji: '😐' },
+                  { value: 4, label: 'Good', emoji: '🙂' },
+                  { value: 5, label: 'Strong', emoji: '😊' },
+                ].map((mood) => (
+                  <button
+                    key={mood.value}
+                    onClick={() => setSelectedMood(mood.value)}
+                    className={`rounded-2xl border px-2 py-3 text-center transition ${
+                      selectedMood === mood.value
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50'
                     }`}
-                    style={{ 
-                      width: stats.riskLevel === 'critical' ? '100%' :
-                             stats.riskLevel === 'high' ? '75%' :
-                             stats.riskLevel === 'medium' ? '50%' : '25%'
-                    }}
-                  ></div>
-                </div>
+                  >
+                    <div className="text-xl">{mood.emoji}</div>
+                    <div className="mt-2 text-[11px] font-semibold">{mood.label}</div>
+                  </button>
+                ))}
               </div>
-
-              <div className="space-y-3 sm:space-y-4">
-                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Calendar className="h-5 w-5 text-primary-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Last Screening</p>
-                    <p className="text-xs sm:text-sm text-gray-500">{stats.lastScreening || 'No screenings yet'}</p>
-                  </div>
+              <textarea
+                value={moodNotes}
+                onChange={(e) => setMoodNotes(e.target.value)}
+                rows={3}
+                placeholder="Optional note about today…"
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+              />
+              {moodFeedback ? (
+                <div
+                  className={`rounded-2xl border px-4 py-3 text-sm ${
+                    moodFeedback.tone === 'success'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                      : 'border-rose-200 bg-rose-50 text-rose-900'
+                  }`}
+                >
+                  {moodFeedback.message}
                 </div>
-                
-                <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                  <Heart className="h-5 w-5 text-primary-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">Next Recommended Screening</p>
-                    <p className="text-xs sm:text-sm text-gray-500">In 2 weeks</p>
-                  </div>
-                </div>
-              </div>
+              ) : null}
+              <button
+                onClick={() => void submitMoodCheck()}
+                disabled={moodSaving}
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-px hover:bg-slate-900 disabled:opacity-60"
+              >
+                <SmilePlus className="h-4 w-4" />
+                {moodSaving ? 'Saving…' : 'Save mood check'}
+              </button>
             </div>
           </div>
 
-          {/* Quick Actions */}
-          <div className="space-y-4 sm:space-y-6">
-            <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 border border-gray-200">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Quick Actions</h3>
-              <div className="space-y-2 sm:space-y-3">
-                <button 
-                  onClick={() => window.location.href = '/screening'}
-                  className="w-full bg-primary-600 text-white py-2.5 sm:py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors text-left text-sm sm:text-base font-medium shadow-md hover:shadow-lg touch-manipulation"
-                >
-                  Take New Screening
-                </button>
-                <button 
-                  onClick={() => window.location.href = '/self-care'}
-                  className="w-full bg-gray-200 text-gray-800 py-2.5 sm:py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors text-left text-sm sm:text-base font-medium touch-manipulation"
-                >
-                  Start Self-Care Exercise
-                </button>
-                <button 
-                  onClick={() => window.location.href = '/chatbot'}
-                  className="w-full bg-gray-200 text-gray-800 py-2.5 sm:py-3 px-4 rounded-lg hover:bg-gray-300 transition-colors text-left text-sm sm:text-base font-medium touch-manipulation"
-                >
-                  Chat with Support
-                </button>
-              </div>
+          <div className={panel}>
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className={sectionLabel}>Care Team</p>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">Follow-up summary</h3>
             </div>
-
-            <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 border border-gray-200">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3 sm:mb-4">Recent Activity</h3>
-              <div className="space-y-2 sm:space-y-3">
-                <div className="flex items-center space-x-3 py-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
-                  <p className="text-xs sm:text-sm text-gray-600">Completed breathing exercise</p>
-                </div>
-                <div className="flex items-center space-x-3 py-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></div>
-                  <p className="text-xs sm:text-sm text-gray-600">PHQ-9 screening completed</p>
-                </div>
-                <div className="flex items-center space-x-3 py-2">
-                  <div className="w-2 h-2 bg-yellow-500 rounded-full flex-shrink-0"></div>
-                  <p className="text-xs sm:text-sm text-gray-600">Mood entry logged</p>
-                </div>
+            <div className="p-5 grid gap-4">
+              <StateRow label="Active conversations" value={String(careTeamSummary.activeCount)} />
+              <StateRow label="Unread messages" value={String(careTeamSummary.unreadCount)} />
+              <StateRow label="Reply requested" value={String(careTeamSummary.replyRequestedCount)} />
+              <StateRow label="Scheduled follow-up" value={String(careTeamSummary.scheduledFollowups)} />
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <p className="text-sm font-semibold text-slate-900">
+                  {careTeamSummary.latestNotificationTitle || 'No new care-team updates.'}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Messages here come from your clinician or care team and stay separate from Chatbot support.
+                </p>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Recommendations */}
-        <div className="mt-6 sm:mt-8">
-          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 border border-gray-200">
-            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Personalized Recommendations</h3>
-            <div className="grid sm:grid-cols-2 gap-4 sm:gap-6">
-              <div className="space-y-3 p-4 bg-blue-50 rounded-lg border border-blue-100">
-                <h4 className="font-medium text-gray-900 text-sm sm:text-base">Based on your recent screening:</h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-gray-600">
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span>Consider daily mindfulness exercises</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span>Practice stress management techniques</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span>Maintain regular sleep schedule</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span>Stay connected with support network</span>
-                  </li>
-                </ul>
-              </div>
-              <div className="space-y-3 p-4 bg-purple-50 rounded-lg border border-purple-100">
-                <h4 className="font-medium text-gray-900 text-sm sm:text-base">Upcoming milestones:</h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-gray-600">
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span>Complete 10 self-care exercises (2 remaining)</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span>Maintain 7-day mood tracking streak</span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span>Schedule next screening in 2 weeks</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };
 
 export default Dashboard;
+
+const OnboardingCta: React.FC<{ orchestration: OrchestrationState | null }> = ({ orchestration }) => {
+  const needsOnboarding = !!orchestration && !orchestration.onboarding_complete;
+  if (!needsOnboarding) return null;
+  return (
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <p className={sectionLabel}>Onboarding</p>
+        <p className="mt-1 text-sm font-medium text-amber-950">
+          Complete your setup to personalize recommendations. Next step: {orchestration?.resume_step}.
+        </p>
+      </div>
+      <Link to="/register" className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-700">
+        Resume
+      </Link>
+    </div>
+  );
+};
+
+function labelForRisk(riskLevel: string) {
+  if (!riskLevel) return 'Unknown';
+  return riskLevel.charAt(0).toUpperCase() + riskLevel.slice(1);
+}
+
+function capitalize(value: string) {
+  if (!value) return '—';
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function riskTone(level: string): 'danger' | 'warning' | 'primary' | 'neutral' {
+  if (level === 'critical') return 'danger';
+  if (level === 'high') return 'warning';
+  if (level === 'medium') return 'primary';
+  return 'neutral';
+}
+
+const toneMap: Record<string, string> = {
+  danger: 'border-rose-200 bg-rose-50 text-rose-900',
+  warning: 'border-amber-200 bg-amber-50 text-amber-900',
+  primary: 'border-primary-200 bg-primary-50 text-primary-900',
+  neutral: 'border-slate-200 bg-slate-50 text-slate-900',
+  care: 'border-indigo-200 bg-indigo-50 text-indigo-900',
+  success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+  sky: 'border-sky-200 bg-sky-50 text-sky-900',
+};
+
+function MetricTile({
+  label,
+  value,
+  caption,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  icon: React.ReactNode;
+  tone: 'danger' | 'warning' | 'primary' | 'neutral';
+}) {
+  return (
+    <div className={`rounded-2xl border px-4 py-4 shadow-sm ${toneMap[tone]}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] opacity-70">{label}</p>
+        <div className="opacity-70">{icon}</div>
+      </div>
+      <p className="mt-3 text-2xl font-bold tracking-tight">{value}</p>
+      <p className="mt-1 text-xs opacity-75">{caption}</p>
+    </div>
+  );
+}
+
+function SignalBanner({ tone, title, body }: { tone: 'danger' | 'warning'; title: string; body: string }) {
+  return (
+    <div className={`rounded-2xl border px-5 py-4 ${toneMap[tone]}`}>
+      <p className="text-sm font-bold">{title}</p>
+      <p className="mt-1 text-sm opacity-90">{body}</p>
+    </div>
+  );
+}
+
+function ActionRow({
+  href,
+  title,
+  description,
+  tone,
+}: {
+  href: string;
+  title: string;
+  description: string;
+  tone: 'primary' | 'neutral' | 'care';
+}) {
+  return (
+    <Link
+      to={href}
+      className={`group flex items-center justify-between gap-4 rounded-2xl border px-4 py-4 transition-all hover:-translate-y-px ${toneMap[tone]}`}
+    >
+      <div>
+        <p className="text-sm font-bold">{title}</p>
+        <p className="mt-1 text-sm opacity-85">{description}</p>
+      </div>
+      <ArrowRight className="h-4 w-4 shrink-0 opacity-60 transition-transform group-hover:translate-x-0.5" />
+    </Link>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">{value}</p>
+    </div>
+  );
+}
+
+function StateRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-b-0 last:pb-0">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="text-sm font-semibold text-slate-950 text-right">{value}</p>
+    </div>
+  );
+}
+
+function StatusPill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: 'danger' | 'warning' | 'primary' | 'neutral';
+}) {
+  return (
+    <div className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${toneMap[tone]}`}>
+      {label}
+    </div>
+  );
+}

@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Volume2, RotateCcw, Pause, Play, CheckCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, CheckCircle, Pause, Play, RotateCcw } from 'lucide-react';
 
 interface ProgressiveRelaxationProps {
   exercise: {
@@ -11,6 +11,9 @@ interface ProgressiveRelaxationProps {
   onComplete: () => void;
 }
 
+const sessionShellBackground =
+  'bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.14),_transparent_28%),linear-gradient(180deg,#0f172a_0%,#172554_55%,#111827_100%)]';
+
 const muscleGroups = [
   { name: 'Toes', emoji: '🦶' },
   { name: 'Calves', emoji: '🦵' },
@@ -21,111 +24,89 @@ const muscleGroups = [
   { name: 'Shoulders', emoji: '🤷' },
   { name: 'Neck', emoji: '👤' },
   { name: 'Face', emoji: '😌' },
-];
+] as const;
 
-const ProgressiveRelaxation: React.FC<ProgressiveRelaxationProps> = ({
-  exercise,
-  onClose,
-  onComplete,
-}) => {
+type RelaxPhase = 'tense' | 'release';
+
+const ProgressiveRelaxation: React.FC<ProgressiveRelaxationProps> = ({ exercise, onClose, onComplete }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentGroup, setCurrentGroup] = useState(0);
-  const [isTensing, setIsTensing] = useState(false);
-  const [tensionCount, setTensionCount] = useState(5);
+  const [phase, setPhase] = useState<RelaxPhase>('tense');
+  const [count, setCount] = useState(5);
   const [remainingTime, setRemainingTime] = useState(exercise.duration * 60);
-  const [progress, setProgress] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const tensionRef = useRef<NodeJS.Timeout | null>(null);
+
+  const totalSeconds = exercise.duration * 60;
+  const progress = totalSeconds > 0 ? ((totalSeconds - remainingTime) / totalSeconds) * 100 : 0;
+  const group = muscleGroups[currentGroup];
+  const phaseCopy =
+    phase === 'tense'
+      ? 'Gently tense this area without straining.'
+      : 'Release slowly and notice the difference in sensation.';
 
   useEffect(() => {
-    if (isPlaying) {
-      startTimer();
-      startTensionCycle();
-    } else {
-      stopTimer();
-      stopTensionCycle();
+    setIsPlaying(false);
+    setCurrentGroup(0);
+    setPhase('tense');
+    setCount(5);
+    setRemainingTime(totalSeconds);
+  }, [exercise, totalSeconds]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+      return;
     }
-
-    return () => {
-      stopTimer();
-      stopTensionCycle();
-    };
-  }, [isPlaying, currentGroup, isTensing, tensionCount]);
-
-  const startTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
       setRemainingTime((prev) => {
         if (prev <= 1) {
-          stopTimer();
+          if (timerRef.current) clearInterval(timerRef.current);
+          timerRef.current = null;
+          setIsPlaying(false);
           onComplete();
           return 0;
         }
         return prev - 1;
       });
-      setProgress((prev) => {
-        const newProgress = prev + (100 / (exercise.duration * 60));
-        return newProgress >= 100 ? 100 : newProgress;
+
+      setCount((prev) => {
+        if (prev > 1) return prev - 1;
+
+        if (phase === 'tense') {
+          setPhase('release');
+          return 5;
+        }
+
+        if (currentGroup >= muscleGroups.length - 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          timerRef.current = null;
+          setIsPlaying(false);
+          onComplete();
+          return 0;
+        }
+
+        setCurrentGroup((value) => value + 1);
+        setPhase('tense');
+        return 5;
       });
     }, 1000);
-  };
 
-  const stopTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
-    }
-  };
-
-  const startTensionCycle = () => {
-    if (tensionRef.current) clearInterval(tensionRef.current);
-
-    tensionRef.current = setInterval(() => {
-      if (isTensing) {
-        setTensionCount((prev) => {
-          if (prev <= 1) {
-            setIsTensing(false);
-            setTensionCount(5);
-            return 5;
-          }
-          return prev - 1;
-        });
-      } else {
-        setTensionCount((prev) => {
-          if (prev <= 1) {
-            setIsTensing(true);
-            if (currentGroup < muscleGroups.length - 1) {
-              setCurrentGroup(currentGroup + 1);
-            } else {
-              stopTimer();
-              stopTensionCycle();
-              onComplete();
-            }
-            return 5;
-          }
-          return prev - 1;
-        });
-      }
-    }, 1000);
-  };
-
-  const stopTensionCycle = () => {
-    if (tensionRef.current) {
-      clearInterval(tensionRef.current);
-      tensionRef.current = null;
-    }
-  };
+    };
+  }, [currentGroup, isPlaying, onComplete, phase]);
 
   const handleReset = () => {
-    stopTimer();
-    stopTensionCycle();
-    setCurrentGroup(0);
-    setIsTensing(false);
-    setTensionCount(5);
-    setRemainingTime(exercise.duration * 60);
-    setProgress(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
     setIsPlaying(false);
+    setCurrentGroup(0);
+    setPhase('tense');
+    setCount(5);
+    setRemainingTime(totalSeconds);
   };
 
   const formatTime = (seconds: number) => {
@@ -134,101 +115,118 @@ const ProgressiveRelaxation: React.FC<ProgressiveRelaxationProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const completedGroups = useMemo(() => muscleGroups.slice(0, currentGroup).map((item) => item.name), [currentGroup]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-indigo-800 to-blue-900 text-white">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 sm:p-6 border-b border-indigo-700">
-        <button
-          onClick={onClose}
-          className="p-2 hover:bg-indigo-700 rounded-lg transition-colors"
-        >
-          <ArrowLeft className="h-6 w-6" />
-        </button>
-        <h2 className="text-xl sm:text-2xl font-bold">{exercise.name}</h2>
-        <button className="p-2 hover:bg-indigo-700 rounded-lg transition-colors">
-          <Volume2 className="h-6 w-6" />
-        </button>
-      </div>
-
-      <div className="max-w-2xl mx-auto p-6">
-        {/* Progress */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-indigo-200">Remaining</span>
-            <span className="text-indigo-200 font-mono">{formatTime(remainingTime)}</span>
-          </div>
-          <div className="w-full bg-indigo-700 rounded-full h-2">
-            <div
-              className="bg-indigo-400 h-2 rounded-full transition-all duration-1000"
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-        </div>
-
-        {/* Current Muscle Group */}
-        <div className={`bg-indigo-800/50 rounded-2xl p-8 mb-6 min-h-[300px] flex flex-col justify-center transition-all ${
-          isTensing ? 'ring-4 ring-red-400 animate-pulse' : 'ring-2 ring-green-400'
-        }`}>
-          <div className="text-center">
-            <div className="text-8xl mb-6">{muscleGroups[currentGroup].emoji}</div>
-            <h3 className="text-3xl sm:text-4xl font-bold mb-4">
-              {muscleGroups[currentGroup].name}
-            </h3>
-            <div className="text-6xl font-bold mb-4">{tensionCount}</div>
-            <p className="text-xl sm:text-2xl text-indigo-100">
-              {isTensing ? 'Tense and Hold...' : 'Release and Relax...'}
-            </p>
-          </div>
-        </div>
-
-        {/* Muscle Groups Progress */}
-        <div className="bg-indigo-800/30 rounded-xl p-4 mb-6">
-          <h4 className="text-sm font-semibold mb-3 text-indigo-200">Muscle Groups</h4>
-          <div className="grid grid-cols-3 gap-2">
-            {muscleGroups.map((group, index) => (
-              <div
-                key={index}
-                className={`p-2 rounded-lg text-center ${
-                  index === currentGroup
-                    ? 'bg-indigo-600 text-white'
-                    : index < currentGroup
-                    ? 'bg-indigo-700/50 text-indigo-200'
-                    : 'bg-indigo-800/30 text-indigo-300'
-                }`}
+    <div className={`min-h-screen ${sessionShellBackground} text-white`}>
+      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+        <div className="overflow-hidden rounded-[30px] border border-white/10 bg-slate-950/35 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.8)] backdrop-blur-md">
+          <div className="border-b border-white/10 px-5 py-4 sm:px-6">
+            <div className="flex items-center justify-between gap-4">
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/90 transition hover:bg-white/10"
               >
-                {index < currentGroup ? (
-                  <CheckCircle className="h-4 w-4 mx-auto mb-1" />
-                ) : null}
-                <div className="text-2xl">{group.emoji}</div>
-                <div className="text-xs">{group.name}</div>
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+              <div className="text-center">
+                <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-indigo-200/75">Relaxation session</p>
+                <h2 className="mt-1 text-xl font-bold sm:text-2xl">{exercise.name}</h2>
               </div>
-            ))}
+              <span className="rounded-full border border-indigo-300/20 bg-indigo-400/10 px-3 py-2 text-sm font-semibold text-indigo-100">
+                {exercise.duration} min
+              </span>
+            </div>
           </div>
-        </div>
 
-        {/* Controls */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handleReset}
-            className="p-3 rounded-full bg-indigo-700 hover:bg-indigo-600 transition-colors"
-          >
-            <RotateCcw className="h-5 w-5" />
-          </button>
+          <div className="grid gap-6 px-5 py-6 sm:px-6 lg:grid-cols-[1.08fr_0.92fr]">
+            <div className="space-y-5">
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-6 sm:p-8">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-indigo-200/75">Current muscle group</p>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
+                    {formatTime(remainingTime)} left
+                  </span>
+                </div>
+                <div className="mt-4 h-2 rounded-full bg-white/10">
+                  <div
+                    className="h-2 rounded-full bg-gradient-to-r from-indigo-400 via-violet-400 to-sky-300 transition-all duration-1000"
+                    style={{ width: `${Math.max(0, Math.min(progress, 100))}%` }}
+                  />
+                </div>
 
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="w-14 h-14 rounded-full bg-indigo-500 hover:bg-indigo-400 flex items-center justify-center transition-all shadow-lg"
-          >
-            {isPlaying ? (
-              <Pause className="h-7 w-7" />
-            ) : (
-              <Play className="h-7 w-7 ml-1" />
-            )}
-          </button>
+                <div
+                  className={`mt-8 rounded-[28px] border p-8 text-center transition-all ${
+                    phase === 'tense'
+                      ? 'border-rose-300/35 bg-rose-400/10 shadow-[0_0_0_1px_rgba(251,113,133,0.12)]'
+                      : 'border-emerald-300/35 bg-emerald-400/10 shadow-[0_0_0_1px_rgba(74,222,128,0.12)]'
+                  }`}
+                >
+                  <div className="text-7xl">{group.emoji}</div>
+                  <h3 className="mt-5 text-4xl font-bold">{group.name}</h3>
+                  <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.22em] text-slate-200/75">
+                    {phase === 'tense' ? 'Tense' : 'Release'}
+                  </p>
+                  <p className="mt-3 text-6xl font-black">{count}</p>
+                  <p className="mt-4 text-lg text-slate-200">{phaseCopy}</p>
+                </div>
+              </div>
 
-          <button className="px-4 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 transition-colors text-sm">
-            {exercise.duration} min
-          </button>
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-indigo-200/75">Controls</p>
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    onClick={handleReset}
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition hover:bg-white/10"
+                  >
+                    <RotateCcw className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => setIsPlaying((value) => !value)}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-slate-100"
+                  >
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    {isPlaying ? 'Pause session' : 'Start session'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-indigo-200/75">Body map</p>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
+                  {completedGroups.length}/{muscleGroups.length} complete
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-3">
+                {muscleGroups.map((item, index) => {
+                  const isCurrent = index === currentGroup;
+                  const isComplete = index < currentGroup;
+                  return (
+                    <div
+                      key={item.name}
+                      className={`rounded-2xl border px-3 py-4 text-center transition ${
+                        isCurrent
+                          ? phase === 'tense'
+                            ? 'border-rose-300/35 bg-rose-400/10'
+                            : 'border-emerald-300/35 bg-emerald-400/10'
+                          : isComplete
+                            ? 'border-indigo-200/20 bg-indigo-400/10'
+                            : 'border-white/10 bg-white/5'
+                      }`}
+                    >
+                      <div className="mb-2 flex justify-center">
+                        {isComplete ? <CheckCircle className="h-4 w-4 text-emerald-300" /> : <span className="text-2xl">{item.emoji}</span>}
+                      </div>
+                      <p className="text-xs font-semibold text-slate-100">{item.name}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -236,6 +234,3 @@ const ProgressiveRelaxation: React.FC<ProgressiveRelaxationProps> = ({
 };
 
 export default ProgressiveRelaxation;
-
-
-

@@ -36,6 +36,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLoading(false);
   }, [firebaseUser]);
 
+  const bootstrapAuthToken = async (firebaseUser: any): Promise<string | null> => {
+    if (!firebaseUser || typeof firebaseUser.getIdToken !== 'function') return null;
+    try {
+      const token = await firebaseUser.getIdToken(true);
+      if (token) {
+        localStorage.setItem('authToken', token);
+      }
+      return token || null;
+    } catch {
+      return null;
+    }
+  };
+
   const login = async (email: string, password: string) => {
     try {
       if (!auth) {
@@ -61,20 +74,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Use real Firebase authentication
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       console.log('Login successful:', userCredential.user.uid);
-      
-      // Create patient card in backend
-      try {
-        const api = (await import('../utils/api')).default;
-        await api.post('/screening/patients/', {
-          firebase_uid: userCredential.user.uid
-        });
-        console.log('Patient card created/updated on login');
-      } catch (patientError: any) {
-        console.warn('Failed to create patient card (may already exist):', patientError);
-        // Don't fail login if patient creation fails
-      }
-      
-      // The user state will be updated automatically via onAuthStateChanged in FirebaseContext
+      await bootstrapAuthToken(userCredential.user);
+
+      // The user state will be updated automatically via onAuthStateChanged in FirebaseContext.
+      // Patient/bootstrap creation is handled by the protected onboarding/state endpoints after token-ready auth.
     } catch (error: any) {
       console.error('Login error:', error);
       
@@ -139,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
         console.log('Display name updated:', name);
       }
+      await bootstrapAuthToken(firebaseUser);
 
       // Optionally, store additional user data in Firestore
       if (db) {
@@ -151,25 +155,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             uid: firebaseUser.uid
           });
           console.log('User data saved to Firestore');
-        } catch (firestoreError) {
-          console.warn('Failed to save user data to Firestore:', firestoreError);
-          // Don't fail registration if Firestore save fails
+        } catch (firestoreError: any) {
+          // Optional write only: do not treat as registration failure.
+          console.info('Optional Firestore profile write skipped:', firestoreError?.code || firestoreError?.message || firestoreError);
         }
       }
 
-      // Create patient card in backend
-      try {
-        const api = (await import('../utils/api')).default;
-        await api.post('/screening/patients/', {
-          firebase_uid: firebaseUser.uid
-        });
-        console.log('Patient card created on registration');
-      } catch (patientError: any) {
-        console.warn('Failed to create patient card (may already exist):', patientError);
-        // Don't fail registration if patient creation fails
-      }
-
-      // The user state will be updated automatically via onAuthStateChanged in FirebaseContext
+      // The user state will be updated automatically via onAuthStateChanged in FirebaseContext.
+      // Patient/bootstrap creation is handled by the protected onboarding/state endpoints after token-ready auth.
       console.log('Registration completed successfully');
     } catch (error: any) {
       console.error('Registration error:', error);
@@ -208,15 +201,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (isFirebaseConfigured && auth.currentUser) {
         await signOut(auth);
+        localStorage.removeItem('authToken');
         console.log('User signed out successfully');
       } else {
         // Mock logout for development
         setUser(null);
+        localStorage.removeItem('authToken');
       }
     } catch (error: any) {
       console.error('Logout error:', error);
       // Even if signOut fails, clear local user state
       setUser(null);
+      localStorage.removeItem('authToken');
       throw new Error('Failed to sign out. Please try again.');
     }
   };

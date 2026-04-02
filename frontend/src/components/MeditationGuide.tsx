@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, Volume2, RotateCcw, Pause, Play, CheckCircle } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, CheckCircle, Pause, Play, RotateCcw, Sparkles } from 'lucide-react';
 
 interface MeditationGuideProps {
   exercise: {
@@ -11,61 +11,65 @@ interface MeditationGuideProps {
   onComplete: () => void;
 }
 
-const MeditationGuide: React.FC<MeditationGuideProps> = ({
-  exercise,
-  onClose,
-  onComplete,
-}) => {
+const sessionShellBackground =
+  'bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.14),_transparent_28%),linear-gradient(180deg,#0f172a_0%,#172554_55%,#111827_100%)]';
+
+const MeditationGuide: React.FC<MeditationGuideProps> = ({ exercise, onClose, onComplete }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [remainingTime, setRemainingTime] = useState(exercise.duration * 60);
-  const [progress, setProgress] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const steps = exercise.instructions.split('\n').filter(s => s.trim());
+  const steps = useMemo(() => exercise.instructions.split('\n').filter((step) => step.trim()), [exercise.instructions]);
+  const totalSeconds = exercise.duration * 60;
+  const progress = totalSeconds > 0 ? ((totalSeconds - remainingTime) / totalSeconds) * 100 : 0;
 
   useEffect(() => {
-    if (isPlaying) {
-      startTimer();
-    } else {
-      stopTimer();
+    setIsPlaying(false);
+    setCurrentStep(0);
+    setRemainingTime(totalSeconds);
+  }, [exercise, totalSeconds]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+      return;
     }
-
-    return () => stopTimer();
-  }, [isPlaying]);
-
-  const startTimer = () => {
-    if (timerRef.current) clearInterval(timerRef.current);
 
     timerRef.current = setInterval(() => {
       setRemainingTime((prev) => {
         if (prev <= 1) {
-          stopTimer();
+          if (timerRef.current) clearInterval(timerRef.current);
+          timerRef.current = null;
+          setIsPlaying(false);
           onComplete();
           return 0;
         }
         return prev - 1;
       });
-      setProgress((prev) => {
-        const newProgress = prev + (100 / (exercise.duration * 60));
-        return newProgress >= 100 ? 100 : newProgress;
-      });
     }, 1000);
-  };
 
-  const stopTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = null;
-    }
-  };
+    };
+  }, [isPlaying, onComplete]);
+
+  useEffect(() => {
+    if (!steps.length) return;
+    const elapsed = totalSeconds - remainingTime;
+    const ratio = totalSeconds > 0 ? elapsed / totalSeconds : 0;
+    const nextStep = Math.min(steps.length - 1, Math.floor(ratio * steps.length));
+    setCurrentStep(nextStep);
+  }, [remainingTime, steps.length, totalSeconds]);
 
   const handleReset = () => {
-    stopTimer();
-    setCurrentStep(0);
-    setRemainingTime(exercise.duration * 60);
-    setProgress(0);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
     setIsPlaying(false);
+    setCurrentStep(0);
+    setRemainingTime(totalSeconds);
   };
 
   const formatTime = (seconds: number) => {
@@ -75,119 +79,124 @@ const MeditationGuide: React.FC<MeditationGuideProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-purple-800 to-indigo-900 text-white">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 sm:p-6 border-b border-purple-700">
-        <button
-          onClick={onClose}
-          className="p-2 hover:bg-purple-700 rounded-lg transition-colors"
-        >
-          <ArrowLeft className="h-6 w-6" />
-        </button>
-        <h2 className="text-xl sm:text-2xl font-bold">{exercise.name}</h2>
-        <button className="p-2 hover:bg-purple-700 rounded-lg transition-colors">
-          <Volume2 className="h-6 w-6" />
-        </button>
-      </div>
-
-      <div className="max-w-2xl mx-auto p-6">
-        {/* Progress */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span className="text-purple-200">Remaining</span>
-            <span className="text-purple-200 font-mono">{formatTime(remainingTime)}</span>
-          </div>
-          <div className="w-full bg-purple-700 rounded-full h-2">
-            <div
-              className="bg-purple-400 h-2 rounded-full transition-all duration-1000"
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-        </div>
-
-        {/* Current Step */}
-        <div className="bg-purple-800/50 rounded-2xl p-6 sm:p-8 mb-6 min-h-[300px] flex flex-col justify-center">
-          <div className="text-center">
-            <div className="text-6xl mb-6">🧘</div>
-            <h3 className="text-2xl sm:text-3xl font-bold mb-4">
-              Step {currentStep + 1} of {steps.length}
-            </h3>
-            <p className="text-lg sm:text-xl text-purple-100 leading-relaxed">
-              {steps[currentStep] || 'Take a moment to breathe...'}
-            </p>
-          </div>
-        </div>
-
-        {/* Steps List */}
-        <div className="bg-purple-800/30 rounded-xl p-4 mb-6">
-          <h4 className="text-sm font-semibold mb-3 text-purple-200">Meditation Steps</h4>
-          <div className="space-y-2">
-            {steps.map((step, index) => (
-              <div
-                key={index}
-                className={`flex items-start gap-3 p-2 rounded-lg ${
-                  index === currentStep
-                    ? 'bg-purple-600 text-white'
-                    : index < currentStep
-                    ? 'bg-purple-700/50 text-purple-200'
-                    : 'text-purple-300'
-                }`}
+    <div className={`min-h-screen ${sessionShellBackground} text-white`}>
+      <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
+        <div className="overflow-hidden rounded-[30px] border border-white/10 bg-slate-950/35 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.8)] backdrop-blur-md">
+          <div className="border-b border-white/10 px-5 py-4 sm:px-6">
+            <div className="flex items-center justify-between gap-4">
+              <button
+                onClick={onClose}
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/90 transition hover:bg-white/10"
               >
-                {index < currentStep ? (
-                  <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
-                ) : (
-                  <div className="w-5 h-5 rounded-full border-2 border-purple-400 mt-0.5 flex-shrink-0 flex items-center justify-center">
-                    <span className="text-xs">{index + 1}</span>
-                  </div>
-                )}
-                <span className="text-sm">{step}</span>
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+              <div className="text-center">
+                <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-violet-200/75">Meditation session</p>
+                <h2 className="mt-1 text-xl font-bold sm:text-2xl">{exercise.name}</h2>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handleReset}
-            className="p-3 rounded-full bg-purple-700 hover:bg-purple-600 transition-colors"
-          >
-            <RotateCcw className="h-5 w-5" />
-          </button>
-
-          <div className="flex gap-4">
-            <button
-              onClick={() => {
-                if (currentStep > 0) setCurrentStep(currentStep - 1);
-              }}
-              disabled={currentStep === 0}
-              className="px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() => {
-                if (currentStep < steps.length - 1) {
-                  setCurrentStep(currentStep + 1);
-                }
-              }}
-              disabled={currentStep === steps.length - 1}
-              className="px-4 py-2 rounded-lg bg-purple-700 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-            </button>
+              <span className="inline-flex items-center gap-2 rounded-full border border-violet-300/20 bg-violet-400/10 px-3 py-2 text-sm font-semibold text-violet-100">
+                <Sparkles className="h-4 w-4" />
+                Guided focus
+              </span>
+            </div>
           </div>
 
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="w-14 h-14 rounded-full bg-purple-500 hover:bg-purple-400 flex items-center justify-center transition-all shadow-lg"
-          >
-            {isPlaying ? (
-              <Pause className="h-7 w-7" />
-            ) : (
-              <Play className="h-7 w-7 ml-1" />
-            )}
-          </button>
+          <div className="grid gap-6 px-5 py-6 sm:px-6 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-5">
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-6 sm:p-8">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-200/75">Current focus</p>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
+                    {formatTime(remainingTime)} left
+                  </span>
+                </div>
+                <div className="mt-4 h-2 rounded-full bg-white/10">
+                  <div
+                    className="h-2 rounded-full bg-gradient-to-r from-violet-400 via-fuchsia-400 to-indigo-300 transition-all duration-1000"
+                    style={{ width: `${Math.max(0, Math.min(progress, 100))}%` }}
+                  />
+                </div>
+
+                <div className="mt-8 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                  <div className="text-6xl">🧘</div>
+                  <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.22em] text-violet-200/70">
+                    Step {currentStep + 1} of {Math.max(steps.length, 1)}
+                  </p>
+                  <h3 className="mt-3 text-3xl font-bold">
+                    {steps[currentStep] || 'Take a quiet breath and settle into the session.'}
+                  </h3>
+                  <p className="mt-4 text-sm leading-relaxed text-slate-300">
+                    Move at a calm pace. If you lose focus, return to the current instruction without judgment.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-200/75">Controls</p>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleReset}
+                    className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition hover:bg-white/10"
+                  >
+                    <RotateCcw className="h-5 w-5" />
+                  </button>
+                  <button
+                    onClick={() => setIsPlaying((value) => !value)}
+                    className="inline-flex flex-1 items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-slate-100"
+                  >
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    {isPlaying ? 'Pause session' : 'Start session'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-violet-200/75">Session map</p>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
+                  {exercise.duration} min
+                </span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {steps.map((step, index) => {
+                  const isCurrent = index === currentStep;
+                  const isComplete = index < currentStep;
+                  return (
+                    <div
+                      key={`${step}-${index}`}
+                      className={`flex items-start gap-3 rounded-2xl border px-4 py-4 transition ${
+                        isCurrent
+                          ? 'border-violet-300/35 bg-violet-400/10'
+                          : isComplete
+                            ? 'border-emerald-300/20 bg-emerald-400/10'
+                            : 'border-white/10 bg-white/5'
+                      }`}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {isComplete ? (
+                          <CheckCircle className="h-5 w-5 text-emerald-300" />
+                        ) : (
+                          <div className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-bold ${
+                            isCurrent ? 'border-violet-200 text-violet-100' : 'border-white/15 text-slate-300'
+                          }`}>
+                            {index + 1}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <p className={`text-sm font-semibold ${isCurrent ? 'text-white' : 'text-slate-200'}`}>{step}</p>
+                        <p className="mt-1 text-xs text-slate-400">
+                          {isCurrent ? 'Current focus' : isComplete ? 'Completed' : 'Upcoming step'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -195,6 +204,3 @@ const MeditationGuide: React.FC<MeditationGuideProps> = ({
 };
 
 export default MeditationGuide;
-
-
-

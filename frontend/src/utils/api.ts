@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAuth } from 'firebase/auth';
 
 // Determine API base URL based on environment
 const getApiBaseUrl = () => {
@@ -23,7 +24,23 @@ const getApiBaseUrl = () => {
   return 'http://localhost:8000/api';
 };
 
-const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = getApiBaseUrl();
+
+export async function getApiAuthToken(): Promise<string | null> {
+  let token: string | null = null;
+  try {
+    const auth = getAuth();
+    if (auth.currentUser) {
+      token = await auth.currentUser.getIdToken();
+    }
+  } catch {
+    // fall through to localStorage
+  }
+  if (!token) {
+    token = localStorage.getItem('authToken');
+  }
+  return token;
+}
 
 // Create axios instance with default config
 const api = axios.create({
@@ -35,14 +52,18 @@ const api = axios.create({
 
 // Add request interceptor to include auth token if available
 api.interceptors.request.use(
-  (config) => {
-    // Get token from localStorage or Firebase auth
-    const token = localStorage.getItem('authToken');
+  (async (config: any) => {
+    const token = await getApiAuthToken();
+
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Let the browser set multipart boundary for file uploads.
+    if (config.data instanceof FormData && config.headers) {
+      delete config.headers['Content-Type'];
+    }
     return config;
-  },
+  }) as any,
   (error) => {
     return Promise.reject(error);
   }
@@ -76,13 +97,21 @@ api.interceptors.response.use(
     }
     
     if (error.response?.status === 401) {
-      // Handle unauthorized - clear token and redirect to login
-      localStorage.removeItem('authToken');
-      window.location.href = '/login';
+      // Avoid destructive redirect loops during token bootstrap while Firebase user is present.
+      let hasFirebaseUser = false;
+      try {
+        hasFirebaseUser = !!getAuth().currentUser;
+      } catch {
+        hasFirebaseUser = false;
+      }
+
+      if (!hasFirebaseUser) {
+        localStorage.removeItem('authToken');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
 );
 
 export default api;
-

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, onIdTokenChanged, User } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -102,6 +102,26 @@ export const FirebaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     });
 
     return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    try {
+      const unsubscribeToken = onIdTokenChanged(auth, async (tokenUser) => {
+        if (!tokenUser) {
+          localStorage.removeItem('authToken');
+          return;
+        }
+        try {
+          const token = await tokenUser.getIdToken();
+          localStorage.setItem('authToken', token);
+        } catch {
+          // Keep auth flow resilient even if token refresh fails transiently.
+        }
+      });
+      return unsubscribeToken;
+    } catch {
+      return () => {};
+    }
   }, []);
 
   const value = {

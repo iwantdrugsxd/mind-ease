@@ -13,6 +13,7 @@ from django.contrib.auth.models import User
 from .models import Patient, PHQ9Screening, GAD7Screening
 from .serializers import PHQ9ScreeningSerializer, GAD7ScreeningSerializer
 from .triage_service import triage_service
+from .identity import get_or_create_patient_for_request
 
 
 class SurveySubmissionViewSet(viewsets.ViewSet):
@@ -24,15 +25,9 @@ class SurveySubmissionViewSet(viewsets.ViewSet):
     
     def _get_or_create_patient(self, request):
         """Get or create patient for the authenticated user"""
-        try:
-            patient = Patient.objects.get(user=request.user)
-        except Patient.DoesNotExist:
-            # Create patient if doesn't exist
-            firebase_uid = request.data.get('firebase_uid', '')
-            patient, _ = Patient.objects.get_or_create(
-                user=request.user,
-                defaults={'firebase_uid': firebase_uid or request.user.username}
-            )
+        _, patient, _ = get_or_create_patient_for_request(request, allow_legacy_firebase_uid=False)
+        if patient is None:
+            raise ValueError("Unable to resolve patient for survey submission.")
         return patient
     
     @action(detail=False, methods=['post'], url_path='submit/phq9')

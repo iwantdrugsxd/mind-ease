@@ -1,8 +1,25 @@
 from rest_framework import serializers
-from .models import (Clinician, PatientAssignment, ClinicianDashboard, PatientTrend,
-                    Appointment, TreatmentPlan, ClinicalNote, AlertResponse)
+from .models import (
+    Clinician,
+    ClinicianDocument,
+    PatientAssignment,
+    ClinicianDashboard,
+    PatientTrend,
+    Appointment,
+    TreatmentPlan,
+    ClinicalNote,
+    AlertResponse,
+    ConsultationCase,
+    ConsultationThread,
+    ConsultationMessage,
+    CareNotification,
+    CareEscalationEvent,
+    CareOrchestrationPolicy,
+)
 from screening.models import Patient, PHQ9Screening, GAD7Screening, ScreeningAlert
 from django.contrib.auth.models import User
+from screening.scorecard_service import build_clinician_patient_summary
+from .access import get_clinician_for_user
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -13,11 +30,117 @@ class UserSerializer(serializers.ModelSerializer):
 
 class ClinicianSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
-    
+
     class Meta:
         model = Clinician
-        fields = ['id', 'user', 'license_number', 'specialization', 'phone_number',
-                 'is_active', 'created_at']
+        fields = [
+            'id',
+            'user',
+            'license_number',
+            'specialization',
+            'phone_number',
+            'is_active',
+            'created_at',
+            'status',
+            'qualification',
+            'years_of_experience',
+            'organization',
+            'max_patients_per_day',
+            'communication_modes',
+            'bio',
+            'reviewed_at',
+            'review_notes',
+        ]
+
+
+class ClinicianRegistrationSerializer(serializers.Serializer):
+    license_number = serializers.CharField(max_length=100)
+    specialization = serializers.CharField(max_length=100)
+    phone_number = serializers.CharField(max_length=20)
+    qualification = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    years_of_experience = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=80)
+    organization = serializers.CharField(max_length=200, required=False, allow_blank=True, default='')
+    max_patients_per_day = serializers.IntegerField(required=False, allow_null=True, min_value=1, max_value=500)
+    communication_modes = serializers.ListField(
+        child=serializers.CharField(max_length=50),
+        required=False,
+    )
+    bio = serializers.CharField(required=False, allow_blank=True, default='')
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+
+    def validate_communication_modes(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Expected a list of mode strings.")
+        return value
+
+
+class ClinicianProfileSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Clinician
+        fields = [
+            'id',
+            'user',
+            'license_number',
+            'specialization',
+            'phone_number',
+            'is_active',
+            'created_at',
+            'status',
+            'qualification',
+            'years_of_experience',
+            'organization',
+            'max_patients_per_day',
+            'communication_modes',
+            'bio',
+            'reviewed_at',
+            'review_notes',
+        ]
+
+
+class ClinicianProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Clinician
+        fields = [
+            'specialization',
+            'phone_number',
+            'qualification',
+            'years_of_experience',
+            'organization',
+            'max_patients_per_day',
+            'communication_modes',
+            'bio',
+        ]
+
+    def validate_communication_modes(self, value):
+        if value is not None and not isinstance(value, list):
+            raise serializers.ValidationError("Expected a list of mode strings.")
+        return value
+
+
+class ClinicianDocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClinicianDocument
+        fields = [
+            'id',
+            'document_type',
+            'file',
+            'file_url',
+            'verification_status',
+            'uploaded_at',
+            'reviewed_at',
+            'review_notes',
+        ]
+        read_only_fields = ['id', 'verification_status', 'uploaded_at', 'reviewed_at', 'review_notes']
+
+    def validate(self, attrs):
+        file = attrs.get('file')
+        url = (attrs.get('file_url') or '').strip()
+        if self.instance is None and not file and not url:
+            raise serializers.ValidationError("Provide either file or file_url for a new document.")
+        return attrs
 
 
 class PatientAssignmentSerializer(serializers.ModelSerializer):
@@ -53,14 +176,28 @@ class PatientTrendSerializer(serializers.ModelSerializer):
 class AppointmentSerializer(serializers.ModelSerializer):
     patient_name = serializers.CharField(source='patient.user.get_full_name', read_only=True)
     clinician_name = serializers.CharField(source='clinician.user.get_full_name', read_only=True)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        case = attrs.get('consultation_case') or getattr(self.instance, 'consultation_case', None)
+        patient = attrs.get('patient') or getattr(self.instance, 'patient', None)
+        request = self.context.get('request')
+        clinician = get_clinician_for_user(getattr(request, 'user', None)) if request else None
+        if case:
+            if patient and case.patient_id != patient.id:
+                raise serializers.ValidationError({'consultation_case': 'Consultation case does not belong to the selected patient.'})
+            if clinician and case.assigned_clinician_id != clinician.id:
+                raise serializers.ValidationError({'consultation_case': 'You are not authorized to link this consultation case.'})
+        return attrs
     
     class Meta:
         model = Appointment
         fields = ['id', 'patient', 'patient_name', 'clinician', 'clinician_name',
                  'appointment_type', 'scheduled_date', 'duration_minutes', 'status',
                  'fhir_appointment_id', 'fhir_patient_id', 'fhir_practitioner_id',
-                 'reason', 'clinician_notes', 'patient_notes', 'created_at',
+                 'reason', 'clinician_notes', 'patient_notes', 'consultation_case', 'created_at',
                  'updated_at', 'completed_at']
+        read_only_fields = ['id', 'clinician', 'patient_name', 'clinician_name', 'created_at', 'updated_at', 'completed_at']
 
 
 class TreatmentPlanSerializer(serializers.ModelSerializer):
@@ -78,12 +215,26 @@ class TreatmentPlanSerializer(serializers.ModelSerializer):
 class ClinicalNoteSerializer(serializers.ModelSerializer):
     patient_name = serializers.CharField(source='patient.user.get_full_name', read_only=True)
     clinician_name = serializers.CharField(source='clinician.user.get_full_name', read_only=True)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        case = attrs.get('consultation_case') or getattr(self.instance, 'consultation_case', None)
+        patient = attrs.get('patient') or getattr(self.instance, 'patient', None)
+        request = self.context.get('request')
+        clinician = get_clinician_for_user(getattr(request, 'user', None)) if request else None
+        if case:
+            if patient and case.patient_id != patient.id:
+                raise serializers.ValidationError({'consultation_case': 'Consultation case does not belong to the selected patient.'})
+            if clinician and case.assigned_clinician_id != clinician.id:
+                raise serializers.ValidationError({'consultation_case': 'You are not authorized to link this consultation case.'})
+        return attrs
     
     class Meta:
         model = ClinicalNote
         fields = ['id', 'patient', 'patient_name', 'clinician', 'clinician_name',
                  'note_type', 'content', 'phq9_screening', 'gad7_screening',
-                 'created_at', 'updated_at']
+                 'consultation_case', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'clinician', 'patient_name', 'clinician_name', 'created_at', 'updated_at']
 
 
 class AlertResponseSerializer(serializers.ModelSerializer):
@@ -120,3 +271,353 @@ class DashboardStatsSerializer(serializers.Serializer):
     risk_distribution = serializers.DictField()
     screening_trends = serializers.DictField()
 
+
+# ===============================
+# Phase 1: Consultation serializers
+# ===============================
+
+class ConsultationMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConsultationMessage
+        fields = [
+            'id',
+            'thread',
+            'sender_user',
+            'sender_type',
+            'content',
+            'message_type',
+            'is_read',
+            'read_at',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'thread', 'sender_user', 'created_at', 'read_at', 'is_read']
+
+
+class ConsultationThreadSerializer(serializers.ModelSerializer):
+    messages = ConsultationMessageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ConsultationThread
+        fields = [
+            'id',
+            'consultation_case',
+            'patient',
+            'clinician',
+            'is_active',
+            'last_message_at',
+            'last_message_preview',
+            'clinician_unread_count',
+            'patient_unread_count',
+            'created_at',
+            'updated_at',
+            'messages',
+        ]
+        read_only_fields = [
+            'id',
+            'consultation_case',
+            'patient',
+            'clinician',
+            'last_message_at',
+            'last_message_preview',
+            'clinician_unread_count',
+            'patient_unread_count',
+            'created_at',
+            'updated_at',
+        ]
+
+
+class CareNotificationSerializer(serializers.ModelSerializer):
+    consultation_case_id = serializers.IntegerField(source="consultation_case.id", read_only=True)
+
+    class Meta:
+        model = CareNotification
+        fields = [
+            "id",
+            "consultation_case_id",
+            "notification_type",
+            "channel",
+            "title",
+            "body",
+            "status",
+            "destination",
+            "is_read",
+            "read_at",
+            "delivered_at",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class CareEscalationEventSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source="patient.user.get_full_name", read_only=True)
+    clinician_name = serializers.CharField(source="clinician.user.get_full_name", read_only=True)
+    latest_notification_status = serializers.CharField(source="latest_notification.status", read_only=True)
+
+    class Meta:
+        model = CareEscalationEvent
+        fields = [
+            "id",
+            "consultation_case",
+            "patient",
+            "patient_name",
+            "clinician",
+            "clinician_name",
+            "escalation_type",
+            "severity",
+            "status",
+            "title",
+            "summary",
+            "due_at",
+            "triggered_at",
+            "last_evaluated_at",
+            "resolved_at",
+            "latest_notification",
+            "latest_notification_status",
+        ]
+        read_only_fields = fields
+
+
+class CareOrchestrationPolicySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CareOrchestrationPolicy
+        fields = [
+            "id",
+            "name",
+            "is_active",
+            "patient_reply_overdue_hours_default",
+            "patient_reply_overdue_hours_high",
+            "patient_reply_overdue_hours_urgent",
+            "clinician_response_overdue_hours_default",
+            "clinician_response_overdue_hours_high",
+            "clinician_response_overdue_hours_urgent",
+            "reminder_cooldown_hours",
+            "sms_for_urgent_reminders",
+            "auto_resolve_delivery_failure_on_success",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+
+class ConsultationCaseListSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source='patient.user.get_full_name', read_only=True)
+    clinician_name = serializers.CharField(source='assigned_clinician.user.get_full_name', read_only=True)
+    thread_id = serializers.IntegerField(source='thread.id', read_only=True)
+    last_message_at = serializers.DateTimeField(source='thread.last_message_at', read_only=True)
+    unread_for_clinician = serializers.IntegerField(source='thread.clinician_unread_count', read_only=True)
+    unread_for_patient = serializers.IntegerField(source='thread.patient_unread_count', read_only=True)
+    last_message_preview = serializers.CharField(source='thread.last_message_preview', read_only=True)
+    patient_summary = serializers.SerializerMethodField()
+    next_appointment_at = serializers.SerializerMethodField()
+    next_appointment_status = serializers.SerializerMethodField()
+    notification_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ConsultationCase
+        fields = [
+            'id',
+            'patient',
+            'patient_name',
+            'assigned_clinician',
+            'clinician_name',
+            'source',
+            'trigger_reason',
+            'priority',
+            'status',
+            'requires_follow_up',
+            'opened_at',
+            'last_activity_at',
+            'resolved_at',
+            'thread_id',
+            'last_message_at',
+            'unread_for_clinician',
+            'unread_for_patient',
+            'last_message_preview',
+            'next_appointment_at',
+            'next_appointment_status',
+            'notification_count',
+            'patient_summary',
+        ]
+
+    def get_patient_summary(self, obj):
+        return build_clinician_patient_summary(obj.patient)
+
+    def _get_next_appointment(self, obj):
+        try:
+            return obj.appointments.filter(status__in=['scheduled', 'confirmed', 'in_progress']).order_by('scheduled_date').first()
+        except Exception:
+            return None
+
+    def get_next_appointment_at(self, obj):
+        appt = self._get_next_appointment(obj)
+        return appt.scheduled_date if appt else None
+
+    def get_next_appointment_status(self, obj):
+        appt = self._get_next_appointment(obj)
+        return appt.status if appt else None
+
+    def get_notification_count(self, obj):
+        try:
+            return obj.notifications.filter(channel=CareNotification.Channel.IN_APP, recipient_role=CareNotification.RecipientRole.PATIENT).count()
+        except Exception:
+            return 0
+
+
+class PatientConsultationCaseListSerializer(ConsultationCaseListSerializer):
+    """
+    Patient-facing consultation list: no clinician scorecard payload, no internal trigger codes,
+    no peer-side unread counts.
+    """
+
+    care_preview = serializers.SerializerMethodField()
+
+    class Meta(ConsultationCaseListSerializer.Meta):
+        fields = [
+            "id",
+            "patient",
+            "patient_name",
+            "clinician_name",
+            "priority",
+            "status",
+            "requires_follow_up",
+            "opened_at",
+            "last_activity_at",
+            "resolved_at",
+            "thread_id",
+            "last_message_at",
+            "unread_for_patient",
+            "last_message_preview",
+            "care_preview",
+            "next_appointment_at",
+            "next_appointment_status",
+        ]
+
+    def get_care_preview(self, obj):
+        prev = (getattr(getattr(obj, "thread", None), "last_message_preview", None) or "").strip()
+        if prev:
+            return prev
+        return "Your care team is here to support your follow-up."
+
+
+class ConsultationCaseDetailSerializer(serializers.ModelSerializer):
+    patient_name = serializers.CharField(source='patient.user.get_full_name', read_only=True)
+    clinician_name = serializers.CharField(source='assigned_clinician.user.get_full_name', read_only=True)
+    thread = ConsultationThreadSerializer(read_only=True)
+    patient_summary = serializers.SerializerMethodField()
+    appointment_count = serializers.SerializerMethodField()
+    note_count = serializers.SerializerMethodField()
+    most_recent_appointment = serializers.SerializerMethodField()
+    next_appointment_at = serializers.SerializerMethodField()
+    next_appointment_status = serializers.SerializerMethodField()
+    most_recent_note_at = serializers.SerializerMethodField()
+    notification_count = serializers.SerializerMethodField()
+    unread_notification_count = serializers.SerializerMethodField()
+    most_recent_notification_at = serializers.SerializerMethodField()
+    latest_outbound_delivery_status = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ConsultationCase
+        fields = [
+            'id',
+            'patient',
+            'patient_name',
+            'assigned_clinician',
+            'clinician_name',
+            'source',
+            'trigger_reason',
+            'priority',
+            'status',
+            'requires_follow_up',
+            'opened_at',
+            'last_activity_at',
+            'resolved_at',
+            'resolution_notes',
+            'patient_summary',
+            'appointment_count',
+            'note_count',
+            'most_recent_appointment',
+            'most_recent_note_at',
+            'next_appointment_at',
+            'next_appointment_status',
+            'notification_count',
+            'unread_notification_count',
+            'most_recent_notification_at',
+            'latest_outbound_delivery_status',
+            'thread',
+        ]
+
+    def get_patient_summary(self, obj):
+        return build_clinician_patient_summary(obj.patient)
+
+    def get_appointment_count(self, obj):
+        try:
+            return obj.appointments.count()
+        except Exception:
+            return 0
+
+    def get_note_count(self, obj):
+        try:
+            return obj.notes.count()
+        except Exception:
+            return 0
+
+    def get_most_recent_appointment(self, obj):
+        try:
+            appt = obj.appointments.order_by('-scheduled_date').first()
+            return appt.scheduled_date if appt else None
+        except Exception:
+            return None
+
+    def get_next_appointment_at(self, obj):
+        try:
+            appt = obj.appointments.filter(status__in=['scheduled', 'confirmed', 'in_progress']).order_by('scheduled_date').first()
+            return appt.scheduled_date if appt else None
+        except Exception:
+            return None
+
+    def get_next_appointment_status(self, obj):
+        try:
+            appt = obj.appointments.filter(status__in=['scheduled', 'confirmed', 'in_progress']).order_by('scheduled_date').first()
+            return appt.status if appt else None
+        except Exception:
+            return None
+
+    def get_most_recent_note_at(self, obj):
+        try:
+            note = obj.notes.order_by("-created_at").first()
+            return note.created_at if note else None
+        except Exception:
+            return None
+
+    def get_notification_count(self, obj):
+        try:
+            return obj.notifications.filter(channel=CareNotification.Channel.IN_APP, recipient_role=CareNotification.RecipientRole.PATIENT).count()
+        except Exception:
+            return 0
+
+    def get_unread_notification_count(self, obj):
+        try:
+            return obj.notifications.filter(
+                channel=CareNotification.Channel.IN_APP,
+                recipient_role=CareNotification.RecipientRole.PATIENT,
+                is_read=False,
+            ).count()
+        except Exception:
+            return 0
+
+    def get_most_recent_notification_at(self, obj):
+        try:
+            notif = obj.notifications.filter(
+                channel=CareNotification.Channel.IN_APP,
+                recipient_role=CareNotification.RecipientRole.PATIENT,
+            ).order_by("-created_at").first()
+            return notif.created_at if notif else None
+        except Exception:
+            return None
+
+    def get_latest_outbound_delivery_status(self, obj):
+        try:
+            notif = obj.notifications.exclude(channel=CareNotification.Channel.IN_APP).order_by("-created_at").first()
+            return notif.status if notif else None
+        except Exception:
+            return None

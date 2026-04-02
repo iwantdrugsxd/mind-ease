@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import (Patient, PHQ9Screening, GAD7Screening, ScreeningAlert, 
-                    TeleconsultReferral, ChatbotConversation, ChatbotMessage)
+                    TeleconsultReferral, ChatbotConversation, ChatbotMessage,
+                    PatientProfile, PatientBaseline, PatientConsent, PatientPreferences, PatientOnboardingStatus)
 from django.contrib.auth.models import User
 
 
@@ -27,7 +28,7 @@ class PHQ9ScreeningSerializer(serializers.ModelSerializer):
                  'q8_psychomotor', 'q9_suicidal', 'total_score', 'severity_level',
                  'requires_immediate_attention', 'requires_teleconsult', 'risk_level',
                  'created_at']
-        read_only_fields = ['total_score', 'severity_level', 'requires_immediate_attention',
+        read_only_fields = ['patient', 'total_score', 'severity_level', 'requires_immediate_attention',
                            'requires_teleconsult', 'risk_level']
 
 
@@ -38,7 +39,7 @@ class GAD7ScreeningSerializer(serializers.ModelSerializer):
                  'q4_trouble_relaxing', 'q5_restless', 'q6_irritable', 'q7_afraid',
                  'total_score', 'severity_level', 'requires_immediate_attention',
                  'requires_teleconsult', 'risk_level', 'created_at']
-        read_only_fields = ['total_score', 'severity_level', 'requires_immediate_attention',
+        read_only_fields = ['patient', 'total_score', 'severity_level', 'requires_immediate_attention',
                            'requires_teleconsult', 'risk_level']
 
 
@@ -89,3 +90,45 @@ class ChatbotConversationSerializer(serializers.ModelSerializer):
         fields = ['id', 'session_id', 'patient', 'messages', 'created_at', 'updated_at']
         read_only_fields = ['id', 'patient', 'session_id', 'created_at', 'updated_at']
 
+
+class PatientProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientProfile
+        fields = ['preferred_name', 'birth_year', 'gender', 'occupation', 'city']
+
+
+class PatientBaselineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientBaseline
+        fields = ['mood_baseline', 'sleep_quality_baseline', 'stress_level_baseline', 'main_concerns', 'goals']
+
+
+class PatientConsentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientConsent
+        fields = ['data_usage_consent_given', 'data_usage_consent_at',
+                  'emergency_disclaimer_acknowledged', 'emergency_disclaimer_acknowledged_at',
+                  'clinician_access_opt_in', 'consent_version']
+        read_only_fields = ['data_usage_consent_at', 'emergency_disclaimer_acknowledged_at']
+
+
+class PatientPreferencesSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientPreferences
+        fields = ['preferred_time_of_day']
+
+
+class PatientOnboardingStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PatientOnboardingStatus
+        fields = ['account_step_completed', 'profile_step_completed', 'baseline_step_completed',
+                  'consent_step_completed', 'assessment_offered', 'assessment_completed',
+                  'advanced_step_completed', 'onboarding_completed_at', 'onboarding_version']
+
+
+class OnboardingSummarySerializer(serializers.Serializer):
+    profile = PatientProfileSerializer()
+    baseline = PatientBaselineSerializer()
+    consent = PatientConsentSerializer()
+    preferences = PatientPreferencesSerializer()
+    status = PatientOnboardingStatusSerializer()

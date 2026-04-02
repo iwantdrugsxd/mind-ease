@@ -10,7 +10,7 @@ from .models import (
     Patient, PHQ9Screening, GAD7Screening, 
     ScreeningAlert, TeleconsultReferral
 )
-from .tasks import send_alert_notification
+from .tasks import dispatch_background_task, send_alert_notification
 
 
 class TriageService:
@@ -242,7 +242,7 @@ class TriageService:
             alert_type='score_increase',
             message=f"Significant {survey_type.upper()} score increase of {score_increase} points within 2 weeks. Patient requires clinician review."
         )
-        send_alert_notification.delay(alert.id, priority='high')
+        dispatch_background_task(send_alert_notification, alert.id, priority='high')
         return alert
     
     def _create_teleconsult_referral(self, patient, survey_type, score, reason):
@@ -338,7 +338,6 @@ class TriageService:
 
 # Singleton instance
 triage_service = TriageService()
-
 
 
 

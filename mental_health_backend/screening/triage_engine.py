@@ -1,7 +1,7 @@
 from django.utils import timezone
 from datetime import timedelta
 from .models import ScreeningAlert, TeleconsultReferral, PHQ9Screening, GAD7Screening
-from .tasks import send_alert_notification, schedule_teleconsult
+from .tasks import dispatch_background_task, send_alert_notification, schedule_teleconsult
 from .nlp_utils import emotion_detector
 
 
@@ -52,7 +52,7 @@ class TriageEngine:
         )
         
         # Send immediate notification
-        send_alert_notification.delay(alert.id, priority='critical')
+        dispatch_background_task(send_alert_notification, alert.id, priority='critical')
     
     def _create_alert(self, patient, screening, alert_type, message):
         """Create standard alert"""
@@ -63,7 +63,7 @@ class TriageEngine:
         )
         
         # Send notification
-        send_alert_notification.delay(alert.id, priority='high')
+        dispatch_background_task(send_alert_notification, alert.id, priority='high')
     
     def _create_urgent_referral(self, patient, screening, reason):
         """Create urgent teleconsult referral"""
@@ -77,7 +77,7 @@ class TriageEngine:
         )
         
         # Schedule immediate teleconsult
-        schedule_teleconsult.delay(referral.id)
+        dispatch_background_task(schedule_teleconsult, referral.id)
     
     def _create_teleconsult_referral(self, patient, screening, reason):
         """Create standard teleconsult referral"""
@@ -163,7 +163,6 @@ class TriageEngine:
             ])
         
         return recommendations
-
 
 
 

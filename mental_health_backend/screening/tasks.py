@@ -8,6 +8,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def dispatch_background_task(task, *args, **kwargs):
+    """
+    Best-effort task dispatch for local/dev environments.
+    Screening submission must not fail just because Celery/Redis is unavailable.
+    """
+    try:
+        return task.delay(*args, **kwargs)
+    except Exception as exc:
+        logger.warning("Background task dispatch failed for %s: %s", getattr(task, "name", task), exc)
+        return None
+
+
 @shared_task
 def send_alert_notification(alert_id, priority='normal'):
     """Send alert notification via email and SMS"""
@@ -38,7 +50,8 @@ def send_alert_notification(alert_id, priority='normal'):
         
         # SMS notification for critical alerts
         if priority == 'critical' and patient.phone_number:
-            send_sms_notification.delay(
+            dispatch_background_task(
+                send_sms_notification,
                 patient.phone_number,
                 f"URGENT: Mental health alert requires immediate attention. Please contact your healthcare provider or call 988."
             )
@@ -177,7 +190,6 @@ def process_score_trends():
         
     except Exception as e:
         logger.error(f"Failed to process score trends: {str(e)}")
-
 
 
 

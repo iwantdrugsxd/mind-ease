@@ -36,6 +36,13 @@ const Navbar: React.FC = () => {
             </Link>
             {user ? (
               <>
+                <Link
+                  to="/clinicians"
+                  className="text-slate-500 hover:text-slate-700 px-3 py-2 rounded-md text-sm"
+                  title="Care provider information and application"
+                >
+                  For clinicians
+                </Link>
                 <Link to="/screening" className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
                   Screening
                 </Link>
@@ -64,6 +71,13 @@ const Navbar: React.FC = () => {
               </>
             ) : (
               <>
+                <Link
+                  to="/clinicians"
+                  className="text-slate-600 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium"
+                  title="Care provider information and application"
+                >
+                  Clinicians
+                </Link>
                 <Link to="/login" className="text-gray-700 hover:text-primary-600 px-3 py-2 rounded-md text-sm font-medium">
                   Login
                 </Link>
@@ -94,6 +108,12 @@ const Navbar: React.FC = () => {
               </Link>
               {user ? (
                 <>
+                  <Link
+                    to="/clinicians"
+                    className="text-slate-500 hover:text-slate-700 block px-3 py-2 rounded-md text-base font-medium"
+                  >
+                    For clinicians
+                  </Link>
                   <Link to="/screening" className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
                     Screening
                   </Link>
@@ -122,6 +142,12 @@ const Navbar: React.FC = () => {
                 </>
               ) : (
                 <>
+                  <Link
+                    to="/clinicians"
+                    className="text-slate-600 hover:text-slate-900 block px-3 py-2 rounded-md text-base font-medium"
+                  >
+                    Clinicians
+                  </Link>
                   <Link to="/login" className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
                     Login
                   </Link>
