@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
 import { getAuth } from 'firebase/auth';
@@ -55,6 +55,35 @@ const Register: React.FC = () => {
     prevStepRef.current = currentStep;
   }, [currentStep]);
 
+  const waitForAuthToken = useCallback(async () => {
+    try {
+      const auth = getAuth();
+      if (auth.currentUser) {
+        const token = await auth.currentUser.getIdToken(true);
+        if (token) {
+          localStorage.setItem('authToken', token);
+        }
+      }
+    } catch {
+      // Request interceptor also fetches live token; this just reduces first-call race further.
+    }
+  }, []);
+
+  const fetchOnboardingSummaryWithBootstrapRetry = useCallback(async (): Promise<any> => {
+    await waitForAuthToken();
+    try {
+      return await api.get('/screening/onboarding/me/');
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 401 || status === 403) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        await waitForAuthToken();
+        return await api.get('/screening/onboarding/me/');
+      }
+      throw err;
+    }
+  }, [waitForAuthToken]);
+
   useEffect(() => {
     // If user is already authenticated, bootstrap summary to resume state
     const bootstrap = async () => {
@@ -77,36 +106,7 @@ const Register: React.FC = () => {
       }
     };
     bootstrap();
-  }, [user]);
-
-  const waitForAuthToken = async () => {
-    try {
-      const auth = getAuth();
-      if (auth.currentUser) {
-        const token = await auth.currentUser.getIdToken(true);
-        if (token) {
-          localStorage.setItem('authToken', token);
-        }
-      }
-    } catch {
-      // Request interceptor also fetches live token; this just reduces first-call race further.
-    }
-  };
-
-  const fetchOnboardingSummaryWithBootstrapRetry = async (): Promise<any> => {
-    await waitForAuthToken();
-    try {
-      return await api.get('/screening/onboarding/me/');
-    } catch (err: any) {
-      const status = err?.response?.status;
-      if (status === 401 || status === 403) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
-        await waitForAuthToken();
-        return await api.get('/screening/onboarding/me/');
-      }
-      throw err;
-    }
-  };
+  }, [user, fetchOnboardingSummaryWithBootstrapRetry]);
 
   const goNext = (key?: StepKey) => {
     if (key) { setCurrentStep(key); return; }
