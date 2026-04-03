@@ -1,30 +1,61 @@
 import axios from 'axios';
 import { getAuth } from 'firebase/auth';
 
-// Determine API base URL based on environment
-const getApiBaseUrl = () => {
-  // If explicitly set in environment, use that
-  if (process.env.REACT_APP_API_BASE_URL) {
-    return process.env.REACT_APP_API_BASE_URL;
+declare global {
+  interface Window {
+    __RUNTIME_CONFIG__?: { API_BASE_URL?: string };
   }
-  
-  // In production (deployed), try to use a production backend URL
-  // For now, default to localhost for development
-  // TODO: Replace with your production backend URL when deployed
-  const isProduction = window.location.hostname !== 'localhost' && 
-                       window.location.hostname !== '127.0.0.1';
-  
-  if (isProduction) {
-    // If you have a production backend, set it here or via environment variable
-    // Example: return 'https://your-backend-domain.com/api';
-    // For now, we'll still try localhost but show a helpful error
-    console.warn('Production mode detected but no production API URL configured. Using localhost.');
+}
+
+const DEFAULT_LOCAL_API = 'http://localhost:8000/api';
+
+function normalizeApiRoot(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+function looksLikeLocalhostApi(url: string): boolean {
+  return /localhost|127\.0\.0\.1/i.test(url);
+}
+
+// Hosted Firebase (and similar) cannot reach your laptop's localhost — need a public API URL.
+const getApiBaseUrl = (): string => {
+  const runtimeRaw =
+    typeof window !== 'undefined'
+      ? window.__RUNTIME_CONFIG__?.API_BASE_URL?.trim()
+      : '';
+  if (runtimeRaw) {
+    return normalizeApiRoot(runtimeRaw);
   }
-  
-  return 'http://localhost:8000/api';
+
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isLocalHost = host === 'localhost' || host === '127.0.0.1';
+
+  const envDev = process.env.REACT_APP_API_BASE_URL?.trim();
+  const envProd = process.env.REACT_APP_API_BASE_URL_PRODUCTION?.trim();
+
+  if (isLocalHost) {
+    return normalizeApiRoot(envDev || DEFAULT_LOCAL_API);
+  }
+
+  if (envProd && !looksLikeLocalhostApi(envProd)) {
+    return normalizeApiRoot(envProd);
+  }
+  if (envDev && !looksLikeLocalhostApi(envDev)) {
+    return normalizeApiRoot(envDev);
+  }
+
+  return normalizeApiRoot(DEFAULT_LOCAL_API);
 };
 
 export const API_BASE_URL = getApiBaseUrl();
+
+export function isHostedAppCallingLocalApi(): boolean {
+  if (typeof window === 'undefined') return false;
+  const h = window.location.hostname;
+  const isLocalHost = h === 'localhost' || h === '127.0.0.1';
+  if (isLocalHost) return false;
+  return looksLikeLocalhostApi(API_BASE_URL);
+}
 
 export async function getApiAuthToken(): Promise<string | null> {
   let token: string | null = null;
@@ -80,10 +111,12 @@ api.interceptors.response.use(
       
       if (isProduction) {
         console.error('Backend server is not accessible. Please ensure the backend is running and accessible.');
-        // Return a more helpful error
+        const hint = isHostedAppCallingLocalApi()
+          ? 'Hosted apps cannot use http://localhost:8000 (that is the visitor\'s device). Set API_BASE_URL in frontend/public/runtime-config.js to your public API (e.g. https://your-app.onrender.com/api), then run npm run build and firebase deploy --only hosting. Or use a tunnel: bash scripts/tunnel-django.sh with Django on port 8000, paste the HTTPS URL + /api into runtime-config.js, rebuild, and redeploy. Ensure Django allows CORS for this Firebase origin.'
+          : 'Please ensure the backend is running and reachable at the configured API URL.';
         return Promise.reject({
           ...error,
-          message: 'Backend server is not running or not accessible. Please start the Django backend server on localhost:8000 or configure a production API URL.',
+          message: `Cannot reach the API (${API_BASE_URL}). ${hint}`,
           isConnectionError: true
         });
       } else {

@@ -37,9 +37,12 @@ const ScreeningQuestionPanel: React.FC<ScreeningQuestionPanelProps> = ({
         <div className="p-4 sm:p-6 md:p-8">
           <div className="mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 sm:mb-4 gap-2">
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-950">
-                {testTitle} Question {currentIndex + 1} of {questions.length}
-              </h2>
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">{testTitle}</p>
+                <h2 className="mt-1 text-xl sm:text-2xl font-bold text-slate-950">
+                  Question {currentIndex + 1} of {questions.length}
+                </h2>
+              </div>
               <div className="text-xs sm:text-sm text-slate-500">
                 {Math.round(((currentIndex + 1) / questions.length) * 100)}% Complete
               </div>
@@ -64,7 +67,7 @@ const ScreeningQuestionPanel: React.FC<ScreeningQuestionPanelProps> = ({
                   key={option.value}
                   className={`flex items-center p-3 sm:p-4 rounded-xl border cursor-pointer transition-colors touch-manipulation ${
                     selected === option.value
-                      ? 'border-slate-900 bg-slate-50'
+                      ? 'border-slate-900 bg-slate-50 shadow-sm'
                       : 'border-slate-200 hover:border-slate-300 active:bg-slate-50'
                   }`}
                 >

@@ -1,0 +1,25 @@
+# Blueprint: https://render.com/docs/blueprint-spec
+# After deploy, set frontend/public/runtime-config.js to:
+#   window.__RUNTIME_CONFIG__.API_BASE_URL = "https://<this-service>.onrender.com/api";
+# then: cd frontend && npm run build && firebase deploy --only hosting
+#
+# Add Render env vars in the dashboard as needed:
+#   DJANGO_SECRET_KEY (required for production)
+#   FIREBASE_CREDENTIALS_PATH or service account JSON via your preferred method
+#   CORS_ALLOWED_ORIGINS (optional extra origins, comma-separated)
+
+services:
+  - type: web
+    name: mindcare-django-api
+    runtime: docker
+    region: oregon
+    plan: free
+    dockerfilePath: ./mental_health_backend/Dockerfile
+    dockerContext: ./mental_health_backend
+    envVars:
+      - key: DJANGO_DEBUG
+        value: "false"
+      - key: ALLOWED_HOSTS
+        value: .onrender.com,localhost,127.0.0.1
+      - key: WEB_CONCURRENCY
+        value: "2"

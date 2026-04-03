@@ -35,18 +35,18 @@ const ClinicianStatsCards: React.FC<ClinicianStatsCardsProps> = ({ summaries }) 
   };
 
   return (
-    <div className="clinician-stat-grid grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+    <div className="clinician-stat-grid grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
       {cards.map(({ label, value, icon: Icon, tone }) => (
         <div
           key={label}
-          className={`${clinPanel} p-4 flex gap-3 items-start transition-all duration-200 hover:shadow-[0_12px_32px_-12px_rgba(15,23,42,0.12)] hover:-translate-y-0.5 clinician-stat-card`}
+          className={`${clinPanel} min-h-[96px] p-3 sm:p-4 flex gap-3 items-start transition-all duration-200 hover:shadow-[0_12px_32px_-12px_rgba(15,23,42,0.12)] hover:-translate-y-0.5 clinician-stat-card`}
         >
-          <div className={`rounded-lg p-2.5 ${toneIcon[tone]}`}>
-            <Icon className="h-5 w-5" aria-hidden />
+          <div className={`rounded-lg p-2 ${toneIcon[tone]}`}>
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden />
           </div>
           <div className="min-w-0">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider leading-tight">{label}</p>
-            <p className="text-2xl font-bold text-slate-900 tabular-nums mt-1">{value}</p>
+            <p className="mt-1 text-xl sm:text-2xl font-bold text-slate-900 tabular-nums">{value}</p>
           </div>
         </div>
       ))}

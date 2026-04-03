@@ -6,9 +6,7 @@ import {
   Activity,
   User,
   ArrowRight,
-  Sparkles,
   Shield,
-  MessageCircle,
   HeartHandshake,
   SmilePlus,
 } from 'lucide-react';
@@ -364,13 +362,13 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 lg:space-y-8">
+    <div className="space-y-5 lg:space-y-7">
       <section className={`${panel} overflow-hidden`}>
         <div className="h-1.5 w-full bg-gradient-to-r from-slate-950 via-slate-700 to-slate-400" />
-        <div className="p-5 sm:p-6 lg:p-7">
-          <div className="grid gap-6 xl:grid-cols-[1.4fr_0.9fr]">
-            <div className="space-y-6">
-              <div className="flex items-start gap-4 sm:gap-5">
+        <div className="p-4 sm:p-5 lg:p-6">
+          <div className="grid gap-4 xl:grid-cols-[1.35fr_0.85fr]">
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 sm:gap-4">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-900/20 ring-1 ring-slate-800/10">
                   <User className="h-6 w-6" />
                 </div>
@@ -379,10 +377,7 @@ const Dashboard: React.FC = () => {
                   <h2 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-950">
                     Welcome back, {displayName}
                   </h2>
-                  <p className="mt-2 max-w-2xl text-sm sm:text-[15px] leading-relaxed text-slate-600">
-                    A single view of your screening status, care-team follow-up, and day-to-day recovery momentum.
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     <StatusPill label={`Risk: ${labelForRisk(stats.riskLevel)}`} tone={riskTone(stats.riskLevel)} />
                     <StatusPill label={`Engagement: ${engagementState}`} tone="neutral" />
                     <StatusPill
@@ -393,16 +388,16 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 grid-cols-2 xl:grid-cols-4">
                 <MetricTile
-                  label="Current risk"
+                  label="Risk"
                   value={labelForRisk(stats.riskLevel)}
                   caption={orchestration?.latest_assessment?.severity_level?.replace(/_/g, ' ') || 'Assessment-driven'}
                   tone={riskTone(stats.riskLevel)}
                   icon={<Shield className="h-4 w-4" />}
                 />
                 <MetricTile
-                  label="Care team"
+                  label="Care"
                   value={careTeamSummary.activeCount ? `${careTeamSummary.activeCount}` : 'Quiet'}
                   caption={careStatusLabel}
                   tone={careAttention > 0 ? 'primary' : 'neutral'}
@@ -424,84 +419,45 @@ const Dashboard: React.FC = () => {
                 />
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5">
-                  <p className={sectionLabel}>Next Step</p>
-                  <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">{primaryActionLabel}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                    {orchestration?.next_best_action?.description ||
-                      orchestration?.recommendation?.message ||
-                      'Take the next recommended step to keep your care plan current.'}
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Link
-                      to={primaryActionHref}
-                      className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-px hover:bg-slate-900"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      {primaryActionLabel}
-                    </Link>
-                    <Link
-                      to="/selfcare"
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-all hover:-translate-y-px hover:bg-slate-50"
-                    >
-                      <Activity className="h-4 w-4 text-slate-500" />
-                      Continue self-care
-                    </Link>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className={sectionLabel}>Care Team</p>
-                      <h3 className="mt-2 text-xl font-bold tracking-tight text-slate-950">Communication status</h3>
-                    </div>
-                    <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
-                      {careTeamSummary.activeCount} active
-                    </div>
-                  </div>
-                  <div className="mt-4 grid grid-cols-3 gap-3">
-                    <MiniStat label="Unread" value={String(careTeamSummary.unreadCount)} />
-                    <MiniStat label="Reply" value={String(careTeamSummary.replyRequestedCount)} />
-                    <MiniStat label="Scheduled" value={String(careTeamSummary.scheduledFollowups)} />
-                  </div>
-                  <p className="mt-4 text-sm leading-relaxed text-slate-600">
-                    {careTeamSummary.latestNotificationTitle ||
-                      'Messages from your clinician or care team will appear here when follow-up starts.'}
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Link
-                      to="/care-team"
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-px hover:bg-slate-900"
-                    >
-                      <MessageCircle className="h-4 w-4" />
-                      Open Care Team
-                    </Link>
-                    <Link
-                      to="/chatbot"
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-all hover:-translate-y-px hover:bg-slate-50"
-                    >
-                      <MessageCircle className="h-4 w-4 text-slate-500" />
-                      Use Chatbot
-                    </Link>
-                  </div>
-                </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <ActionRow
+                  href={primaryActionHref}
+                  title={primaryActionLabel}
+                  description="Recommended now"
+                  tone="primary"
+                />
+                <ActionRow
+                  href="/care-team"
+                  title="Open Care Team"
+                  description={careAttention > 0 ? `${careAttention} update${careAttention === 1 ? '' : 's'}` : 'Private messages'}
+                  tone="care"
+                />
+                <ActionRow
+                  href="/selfcare"
+                  title="Continue self-care"
+                  description="Short guided exercises"
+                  tone="neutral"
+                />
               </div>
             </div>
 
             <div className={`${panelMuted} p-4 sm:p-5`}>
-              <p className={sectionLabel}>Need-to-know</p>
-              <div className="mt-4 grid gap-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className={sectionLabel}>Today</p>
+                <div className="rounded-full bg-slate-900 px-3 py-1 text-[11px] font-bold text-white">
+                  ID {patientCard?.id ?? '—'}
+                </div>
+              </div>
+              <div className="mt-3 grid gap-3">
                 <StateRow label="Current risk" value={labelForRisk(stats.riskLevel)} />
                 <StateRow label="Last screening" value={stats.lastScreening || 'No screening yet'} />
                 <StateRow label="Last active" value={lastActiveLabel} />
                 <StateRow label="Care team" value={careTeamSummary.activeCount > 0 ? 'Follow-up active' : 'No active outreach'} />
               </div>
-              <div className="pt-4 mt-4 border-t border-slate-200/80">
-                <div className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-bold text-white">
-                  Patient ID: {patientCard?.id ?? '—'}
-                </div>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <MiniStat label="Unread" value={String(careTeamSummary.unreadCount)} />
+                <MiniStat label="Reply" value={String(careTeamSummary.replyRequestedCount)} />
+                <MiniStat label="Scheduled" value={String(careTeamSummary.scheduledFollowups)} />
               </div>
             </div>
           </div>
@@ -538,30 +494,30 @@ const Dashboard: React.FC = () => {
         </section>
       )}
 
-      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+      <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
           <div className={panel}>
             <div className="px-5 py-4 border-b border-slate-100">
               <p className={sectionLabel}>Action Board</p>
-              <h3 className="mt-1 text-xl font-bold text-slate-950">Core actions</h3>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">What to do next</h3>
             </div>
             <div className="p-5 space-y-4">
               <ActionRow
                 href={primaryActionHref}
                 title={primaryActionLabel}
-                description={orchestration?.next_best_action?.description || orchestration?.recommendation?.message || 'Take the next recommended step to keep your plan current.'}
+                description="Recommended next step"
                 tone="primary"
               />
               <ActionRow
                 href="/care-team"
                 title="Open Care Team"
-                description="Read messages, review follow-up, and reply if your clinician has reached out."
+                description="Read updates and reply"
                 tone="care"
               />
               <ActionRow
                 href="/selfcare"
                 title="Continue self-care"
-                description="Open guided exercises and short routines matched to your current state."
+                description="Resume guided exercises"
                 tone="neutral"
               />
             </div>
@@ -596,8 +552,8 @@ const Dashboard: React.FC = () => {
         <div className="space-y-6">
           <div className={panel}>
             <div className="px-5 py-4 border-b border-slate-100">
-              <p className={sectionLabel}>Lifestyle insight</p>
-              <h3 className="mt-1 text-xl font-bold text-slate-950">What may be shaping your week</h3>
+              <p className={sectionLabel}>Signal</p>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">This week</h3>
             </div>
             <div className="p-5 space-y-4">
               <div className={`rounded-2xl border px-4 py-4 ${toneMap[topLifestyleSignal?.severity === 'high' ? 'warning' : 'neutral']}`}>
@@ -635,15 +591,12 @@ const Dashboard: React.FC = () => {
 
           <div className={panel}>
             <div className="px-5 py-4 border-b border-slate-100">
-              <p className={sectionLabel}>Daily signal</p>
-              <h3 className="mt-1 text-xl font-bold text-slate-950">Quick mood check</h3>
+              <p className={sectionLabel}>Check-in</p>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">Mood check</h3>
             </div>
             <div className="p-5 space-y-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <p className="text-sm font-semibold text-slate-900">{currentMoodLabel}</p>
-                <p className="mt-1 text-sm text-slate-600">
-                  A lightweight daily check-in improves decline detection between formal screenings.
-                </p>
               </div>
               <div className="grid grid-cols-5 gap-2">
                 {[
@@ -699,19 +652,12 @@ const Dashboard: React.FC = () => {
           <div className={panel}>
             <div className="px-5 py-4 border-b border-slate-100">
               <p className={sectionLabel}>Care Team</p>
-              <h3 className="mt-1 text-xl font-bold text-slate-950">Follow-up summary</h3>
+              <h3 className="mt-1 text-xl font-bold text-slate-950">Latest update</h3>
             </div>
-            <div className="p-5 grid gap-4">
-              <StateRow label="Active conversations" value={String(careTeamSummary.activeCount)} />
-              <StateRow label="Unread messages" value={String(careTeamSummary.unreadCount)} />
-              <StateRow label="Reply requested" value={String(careTeamSummary.replyRequestedCount)} />
-              <StateRow label="Scheduled follow-up" value={String(careTeamSummary.scheduledFollowups)} />
+            <div className="p-5">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <p className="text-sm font-semibold text-slate-900">
                   {careTeamSummary.latestNotificationTitle || 'No new care-team updates.'}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Messages here come from your clinician or care team and stay separate from Chatbot support.
                 </p>
               </div>
             </div>
@@ -821,7 +767,7 @@ function ActionRow({
     >
       <div>
         <p className="text-sm font-bold">{title}</p>
-        <p className="mt-1 text-sm opacity-85">{description}</p>
+        <p className="mt-1 text-xs opacity-85">{description}</p>
       </div>
       <ArrowRight className="h-4 w-4 shrink-0 opacity-60 transition-transform group-hover:translate-x-0.5" />
     </Link>
@@ -832,7 +778,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm">
       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
-      <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">{value}</p>
+      <p className="mt-1.5 text-xl font-bold tracking-tight text-slate-950">{value}</p>
     </div>
   );
 }

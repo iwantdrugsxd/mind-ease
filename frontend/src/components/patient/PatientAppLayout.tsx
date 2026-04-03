@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, MessageCircle, X } from 'lucide-react';
 import PatientSidebar from './PatientSidebar';
+import PatientMobileNav from './PatientMobileNav';
 import { fetchPatientCareTeamSummary } from '../../utils/clinicianApi';
 import { subscribeConsultationRefresh } from '../../utils/consultationRefreshBus';
 import { useRefreshOnWindowFocus } from '../../hooks/useRefreshOnWindowFocus';
@@ -46,7 +47,7 @@ export default function PatientAppLayout({ children }: { children: React.ReactNo
       ) : null}
       <PatientSidebar mobileOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex-1 min-w-0 lg:pl-0">
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/70 backdrop-blur-md">
+        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur-md">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <button
@@ -57,12 +58,22 @@ export default function PatientAppLayout({ children }: { children: React.ReactNo
               >
                 {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
               </button>
-              <h1 className="truncate text-base sm:text-lg lg:text-xl font-semibold text-slate-900">{title}</h1>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 lg:hidden">MindEase</p>
+                <h1 className="truncate text-base sm:text-lg lg:text-xl font-semibold text-slate-900">{title}</h1>
+              </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Link
+                to="/chatbot"
+                className="relative inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:-translate-y-px hover:bg-slate-50 lg:hidden"
+              >
+                <MessageCircle className="h-4 w-4" />
+                <span>Chat</span>
+              </Link>
+              <Link
                 to="/care-team"
-                className="relative inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:-translate-y-px hover:bg-slate-50"
+                className="relative hidden lg:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:-translate-y-px hover:bg-slate-50"
               >
                 <MessageCircle className="h-4 w-4" />
                 <span className="hidden sm:inline">Messages</span>
@@ -75,10 +86,11 @@ export default function PatientAppLayout({ children }: { children: React.ReactNo
             </div>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto p-3 sm:p-4 md:p-6 lg:p-8 animate-[fadeIn_200ms_ease-out]">
+        <div className="max-w-7xl mx-auto p-3 pb-24 sm:p-4 sm:pb-24 md:p-6 lg:p-8 lg:pb-8 animate-[fadeIn_200ms_ease-out]">
           {children}
         </div>
       </div>
+      <PatientMobileNav careBadgeCount={careBadgeCount} />
     </div>
   );
 }

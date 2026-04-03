@@ -89,7 +89,7 @@ export default function PatientSidebar({
       <nav className="flex-1 overflow-y-auto p-3 space-y-1">
         <NavLink to="/dashboard" className={linkClass} end onClick={handleNav}>
           <LayoutGrid className="h-4 w-4" />
-          <span>Dashboard</span>
+          <span>Home</span>
         </NavLink>
         <NavLink to="/screening" className={linkClass} onClick={handleNav}>
           <ClipboardList className="h-4 w-4" />
@@ -101,7 +101,7 @@ export default function PatientSidebar({
         </NavLink>
         <NavLink to="/chatbot" className={linkClass} onClick={handleNav}>
           <MessageCircle className="h-4 w-4" />
-          <span>Chatbot</span>
+          <span>Chat</span>
         </NavLink>
         <p className="px-3 text-[10px] text-slate-400 leading-snug -mt-1 mb-1">AI-guided support</p>
         <div className="relative">

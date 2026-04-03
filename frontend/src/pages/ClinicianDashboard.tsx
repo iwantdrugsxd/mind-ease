@@ -150,7 +150,7 @@ const ClinicianDashboard: React.FC = () => {
         <ClinicianPageIntro
           eyebrow="Consultation queue"
           title="Patients who need your attention"
-          description="Derived from scorecard-backed signals and recent alerts."
+          description="Priority cases first."
         />
         <ConsultationQueue
           cases={queue}
@@ -165,7 +165,7 @@ const ClinicianDashboard: React.FC = () => {
           <ClinicianPageIntro
             eyebrow="Roster"
             title="Assigned patients"
-            description="Sorted by risk and follow-up priority. Open a record for assignment-scoped screening context."
+            description="Sorted by risk and follow-up priority."
             actions={
               <ClinicianFilterBar
                 search={search}

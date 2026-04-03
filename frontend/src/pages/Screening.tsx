@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, ArrowRight, ClipboardList, Shield, Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../utils/api';
 import ScreeningQuestionPanel from '../components/ScreeningQuestionPanel';
 import PatientScorecard, { PatientScorecardPayload } from '../components/PatientScorecard';
@@ -152,83 +153,97 @@ const Screening: React.FC = () => {
 
   if (result) {
     return (
-      <div className="space-y-6">
-        <div className="max-w-3xl mx-auto space-y-6">
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_-18px_rgba(15,23,42,0.18)]">
-            <div className="h-1.5 w-full bg-gradient-to-r from-slate-950 via-slate-700 to-slate-400" />
-            <div className="p-4 sm:p-6 md:p-8">
-              <div className="text-center mb-6 sm:mb-8">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Screening complete</p>
-                <h2 className="mt-2 text-2xl sm:text-3xl font-bold text-slate-950 mb-3 sm:mb-4">
-                  {currentTest?.toUpperCase()} Screening Results
-                </h2>
-                <div
-                  className={`inline-flex items-center px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium ${getRiskColor(
-                    result.riskLevel
-                  )}`}
-                >
-                  {result.riskLevel.charAt(0).toUpperCase() + result.riskLevel.slice(1)} Risk
-                </div>
-              </div>
-
-              <div className="space-y-4 sm:space-y-6">
-                <div className="text-center">
-                  <div className="text-3xl sm:text-4xl font-bold text-slate-950 mb-2">{result.totalScore}</div>
-                  <div className="text-base sm:text-lg text-slate-600">
-                    Total Score (Severity: {result.severity.replace('_', ' ')})
+      <div className="max-w-4xl mx-auto space-y-5">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_-18px_rgba(15,23,42,0.18)]">
+          <div className="h-1.5 w-full bg-gradient-to-r from-slate-950 via-slate-700 to-slate-400" />
+          <div className="p-4 sm:p-6 md:p-7">
+            <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-800">
+                    <ClipboardList className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Screening complete</p>
+                    <h2 className="mt-1 text-2xl sm:text-3xl font-bold tracking-tight text-slate-950">
+                      {currentTest?.toUpperCase()} result
+                    </h2>
+                    <div
+                      className={`mt-3 inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold ${getRiskColor(
+                        result.riskLevel
+                      )}`}
+                    >
+                      {result.riskLevel.charAt(0).toUpperCase() + result.riskLevel.slice(1)} risk
+                    </div>
                   </div>
                 </div>
 
-                {result.requiresAttention && (
-                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 sm:p-4">
-                    <div className="flex items-start">
-                      <AlertCircle className="h-5 w-5 text-red-400 mt-0.5 mr-2 sm:mr-3 flex-shrink-0" />
+                <div className="grid grid-cols-2 gap-3">
+                  <ResultStatCard label="Score" value={String(result.totalScore)} note={currentTest?.toUpperCase() || 'Assessment'} />
+                  <ResultStatCard label="Severity" value={titleCase(result.severity)} note="Current level" />
+                </div>
+
+                {result.requiresAttention ? (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
                       <div>
-                        <h3 className="text-sm font-medium text-red-800">Attention Required</h3>
-                        <p className="text-xs sm:text-sm text-red-700 mt-1">
-                          Your screening results indicate that you may benefit from professional support. Please consider
-                          reaching out to a mental health professional or your healthcare provider.
+                        <p className="text-sm font-semibold text-red-900">Professional support may help</p>
+                        <p className="mt-1 text-sm text-red-800">
+                          If you feel unsafe, contact local emergency services or crisis support immediately.
                         </p>
                       </div>
                     </div>
                   </div>
-                )}
+                ) : null}
+              </div>
 
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4">
-                  <h3 className="text-sm font-medium text-slate-900 mb-2">Recommendations</h3>
-                  <ul className="text-xs sm:text-sm text-slate-700 space-y-1">
-                    {result.riskLevel === 'critical' && <li>• Consider immediate professional help or crisis intervention</li>}
-                    {result.riskLevel === 'high' && <li>• Schedule an appointment with a mental health professional</li>}
-                    {result.riskLevel === 'medium' && <li>• Consider self-care strategies and regular monitoring</li>}
-                    <li>• Continue regular mental health check-ins</li>
-                    <li>• Practice stress management techniques</li>
-                  </ul>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Next step</p>
+                <h3 className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+                  {result.riskLevel === 'critical'
+                    ? 'Review support options'
+                    : result.riskLevel === 'high'
+                    ? 'Continue with care'
+                    : 'Keep momentum'}
+                </h3>
+                <div className="mt-4 space-y-3">
+                  <Link
+                    to="/selfcare"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-900 transition hover:-translate-y-px"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-slate-500" />
+                      Explore self-care
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-slate-400" />
+                  </Link>
+                  <Link
+                    to="/care-team"
+                    className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-900 transition hover:-translate-y-px"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-slate-500" />
+                      Open Care Team
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-slate-400" />
+                  </Link>
                   <button
                     type="button"
                     onClick={resetScreening}
-                    className="flex-1 bg-slate-950 text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
+                    className="w-full rounded-2xl bg-slate-950 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-slate-900"
                   >
-                    Take Another Screening
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => (window.location.href = '/selfcare')}
-                    className="flex-1 bg-slate-100 text-slate-800 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-medium hover:bg-slate-200 transition-colors touch-manipulation text-sm sm:text-base"
-                  >
-                    Explore Self-Care
+                    Take another screening
                   </button>
                 </div>
               </div>
             </div>
           </div>
-
-          {postSubmitScorecard && (
-            <PatientScorecard data={postSubmitScorecard} variant="compact" showSupportFooter />
-          )}
         </div>
+
+        {postSubmitScorecard && (
+          <PatientScorecard data={postSubmitScorecard} variant="compact" showSupportFooter={false} />
+        )}
       </div>
     );
   }
@@ -249,50 +264,42 @@ const Screening: React.FC = () => {
           )}
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm transition-all hover:-translate-y-px hover:shadow-md">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm transition-all hover:-translate-y-px hover:shadow-md">
               <div>
                 <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-600">
-                  Depression screening
+                  Depression
                 </div>
-                <h3 className="mt-4 text-xl sm:text-2xl font-bold text-slate-950 mb-3 sm:mb-4">PHQ-9</h3>
-                <p className="text-sm sm:text-base text-slate-600 mb-4 sm:mb-6 leading-relaxed">
-                  A 9-question screening tool for depression. Takes about 3-5 minutes to complete.
-                </p>
-                <ul className="mb-6 space-y-2 text-sm text-slate-600">
-                  <li>• Tracks mood, energy, and day-to-day functioning</li>
-                  <li>• Helpful for regular check-ins over time</li>
-                  <li>• Can trigger more personalized support if needed</li>
-                </ul>
+                <h3 className="mt-4 text-xl sm:text-2xl font-bold text-slate-950 mb-3">PHQ-9</h3>
+                <div className="mb-5 flex flex-wrap gap-2 text-xs text-slate-600">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold">9 questions</span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold">3-5 min</span>
+                </div>
                 <button
                   type="button"
                   onClick={() => setCurrentTest('phq9')}
-                  className="w-full bg-slate-950 text-white px-6 sm:px-8 py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
+                  className="w-full bg-slate-950 text-white px-6 py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
                 >
-                  Start PHQ-9 Screening
+                  Start PHQ-9
                 </button>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm transition-all hover:-translate-y-px hover:shadow-md">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-sm transition-all hover:-translate-y-px hover:shadow-md">
               <div>
                 <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-600">
-                  Anxiety screening
+                  Anxiety
                 </div>
-                <h3 className="mt-4 text-xl sm:text-2xl font-bold text-slate-950 mb-3 sm:mb-4">GAD-7</h3>
-                <p className="text-sm sm:text-base text-slate-600 mb-4 sm:mb-6 leading-relaxed">
-                  A 7-question screening tool for anxiety disorders. Takes about 2-3 minutes to complete.
-                </p>
-                <ul className="mb-6 space-y-2 text-sm text-slate-600">
-                  <li>• Reviews worry, restlessness, and physical tension</li>
-                  <li>• Useful for tracking anxiety severity over time</li>
-                  <li>• Helps tailor follow-up guidance inside the app</li>
-                </ul>
+                <h3 className="mt-4 text-xl sm:text-2xl font-bold text-slate-950 mb-3">GAD-7</h3>
+                <div className="mb-5 flex flex-wrap gap-2 text-xs text-slate-600">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold">7 questions</span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold">2-3 min</span>
+                </div>
                 <button
                   type="button"
                   onClick={() => setCurrentTest('gad7')}
-                  className="w-full bg-slate-950 text-white px-6 sm:px-8 py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
+                  className="w-full bg-slate-950 text-white px-6 py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
                 >
-                  Start GAD-7 Screening
+                  Start GAD-7
                 </button>
               </div>
             </div>
@@ -348,3 +355,17 @@ const Screening: React.FC = () => {
 };
 
 export default Screening;
+
+function ResultStatCard({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">{value}</p>
+      <p className="mt-1 text-sm text-slate-500">{note}</p>
+    </div>
+  );
+}
+
+function titleCase(value: string) {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+}

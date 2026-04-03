@@ -325,31 +325,31 @@ const Chatbot: React.FC = () => {
       <div className="flex flex-wrap gap-2 mt-3">
         <button 
           onClick={() => navigate('/screening')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
         >
           Go to Screening
         </button>
         <button 
           onClick={() => navigate('/dashboard')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
         >
           Open Dashboard
         </button>
         <button 
           onClick={() => navigate('/self-care')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors touch-manipulation font-medium"
         >
           Self-Care Hub
         </button>
         <button 
           onClick={() => setInputMessage('start PHQ-9')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation font-medium"
         >
           PHQ-9
         </button>
         <button 
           onClick={() => setInputMessage('start GAD-7')} 
-          className="px-3 py-1.5 text-xs sm:text-sm rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation font-medium"
+          className="px-3 py-1.5 text-xs rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition-colors touch-manipulation font-medium"
         >
           GAD-7
         </button>
@@ -453,8 +453,8 @@ const Chatbot: React.FC = () => {
                 <Bot className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Conversation</p>
-                <h2 className="mt-1 text-lg sm:text-xl font-bold text-slate-950">MindEase Support Chatbot</h2>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">AI support</p>
+                <h2 className="mt-1 text-lg sm:text-xl font-bold text-slate-950">Chat</h2>
               </div>
             </div>
           </div>
@@ -467,7 +467,6 @@ const Chatbot: React.FC = () => {
                   <Bot className="h-8 w-8 sm:h-10 sm:w-10 text-slate-700" />
                 </div>
                 <p className="text-base sm:text-lg font-medium text-slate-900">Start a conversation</p>
-                <p className="text-sm sm:text-base mt-1 text-slate-600">I’m here to support you with guided check-ins and reflection.</p>
                 <QuickReplies />
               </div>
             ) : (
@@ -540,9 +539,6 @@ const Chatbot: React.FC = () => {
           </div>
 
           <div className="border-t border-slate-200 p-4 bg-white">
-            <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
-              Chatbot helps with reflection and guided support. For clinician follow-up or secure care communication, use Care Team separately.
-            </div>
             <div className="flex gap-2 sm:gap-3 items-end">
               <textarea
                 value={inputMessage}
@@ -563,7 +559,7 @@ const Chatbot: React.FC = () => {
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-slate-500 px-1 w-full sm:w-auto">
-                Press Enter to send, Shift+Enter for new line
+                Enter to send
               </p>
               {messages.length > 0 ? <QuickReplies /> : null}
             </div>

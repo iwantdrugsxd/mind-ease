@@ -33,7 +33,7 @@ export const clinEyebrow = 'text-[10px] font-bold uppercase tracking-[0.2em] tex
 
 export const clinSectionTitle = 'text-base font-bold text-slate-900 tracking-tight';
 
-export const clinSectionDesc = 'text-sm text-slate-600 mt-1 font-medium leading-relaxed';
+export const clinSectionDesc = 'text-xs sm:text-sm text-slate-600 mt-1 font-medium leading-snug';
 
 /** Console page content wrapper — pairs with CSS stagger */
 export const clinConsoleStack = 'space-y-6 clinician-console-stack';

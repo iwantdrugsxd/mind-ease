@@ -86,6 +86,7 @@ const ClinicianPatientDetail: React.FC = () => {
   const [showApptForm, setShowApptForm] = useState(false);
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [mobileTab, setMobileTab] = useState<'overview' | 'chat' | 'actions' | 'timeline'>('overview');
   const [appt, setAppt] = useState<{ type: string; when: string; duration: string; reason: string }>({
     type: 'follow_up',
     when: '',
@@ -156,6 +157,7 @@ const ClinicianPatientDetail: React.FC = () => {
 
   useEffect(() => {
     if ((location.state as { focusChat?: boolean })?.focusChat && consultation && chatSectionRef.current) {
+      setMobileTab('chat');
       chatSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [consultation, location.state]);
@@ -255,6 +257,11 @@ const ClinicianPatientDetail: React.FC = () => {
   const actionBtn =
     'w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-left text-sm font-semibold text-slate-900 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:pointer-events-none';
 
+  const showOverview = mobileTab === 'overview';
+  const showChat = mobileTab === 'chat';
+  const showActions = mobileTab === 'actions';
+  const showTimeline = mobileTab === 'timeline';
+
   return (
     <div className={`${clinConsoleStack} max-w-6xl`}>
       <div>
@@ -267,9 +274,71 @@ const ClinicianPatientDetail: React.FC = () => {
         </Link>
       </div>
 
+      <div className="space-y-4 lg:hidden">
+        <div className="sticky top-0 z-10 rounded-2xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur">
+          <div className="grid grid-cols-4 gap-1">
+            {[
+              { key: 'overview', label: 'Overview' },
+              { key: 'chat', label: 'Chat' },
+              { key: 'actions', label: 'Actions' },
+              { key: 'timeline', label: 'Timeline' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setMobileTab(tab.key as typeof mobileTab)}
+                className={`rounded-xl px-2 py-2 text-[11px] font-bold transition ${
+                  mobileTab === tab.key ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {consultation ? (
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileTab('chat');
+                  scrollToChat();
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+              >
+                Chat
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionError(null);
+                  setShowNoteForm(true);
+                  setShowApptForm(false);
+                  setMobileTab('actions');
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+              >
+                Note
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionError(null);
+                  setShowApptForm(true);
+                  setShowNoteForm(false);
+                  setMobileTab('actions');
+                }}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800"
+              >
+                Schedule
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       <div className="grid lg:grid-cols-[1fr_min(100%,320px)] gap-6 items-start">
         <div className="space-y-5 min-w-0">
-          <div className={`${clinPanel} overflow-hidden`}>
+          <div className={`${clinPanel} overflow-hidden ${!showOverview ? 'hidden lg:block' : ''}`}>
             <div className={clinPanelAccentTop} />
             <div className="p-5 sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -293,7 +362,7 @@ const ClinicianPatientDetail: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className={`grid sm:grid-cols-2 lg:grid-cols-4 gap-3 ${!showOverview ? 'hidden lg:grid' : ''}`}>
             <div className={summaryCard}>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">PHQ-9</p>
               <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">
@@ -331,7 +400,7 @@ const ClinicianPatientDetail: React.FC = () => {
             </div>
           </div>
 
-          <div className={`${clinPanel} overflow-hidden`}>
+          <div className={`${clinPanel} overflow-hidden ${!showOverview ? 'hidden lg:block' : ''}`}>
             <div className={clinPanelHeader}>
               <h2 className="text-sm font-bold text-slate-900">Clinical trajectory</h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">Screening trend and in-app engagement</p>
@@ -367,7 +436,7 @@ const ClinicianPatientDetail: React.FC = () => {
           </div>
 
           {!consultation ? (
-            <div className={`${clinPanel} p-6`}>
+            <div className={`${clinPanel} p-6 ${!showOverview ? 'hidden lg:block' : ''}`}>
               <h2 className="text-sm font-bold text-slate-900">Consultation</h2>
               <p className="text-sm text-slate-600 mt-2">
                 No consultation case is available for this patient right now. Cases are created when follow-up is clinically
@@ -377,7 +446,7 @@ const ClinicianPatientDetail: React.FC = () => {
             </div>
           ) : (
             <>
-              <div className={`${clinPanel} overflow-hidden`}>
+              <div className={`${clinPanel} overflow-hidden ${!showOverview ? 'hidden lg:block' : ''}`}>
                 <div className={clinPanelHeader}>
                   <h2 className="text-sm font-bold text-slate-900">Consultation context</h2>
                   <p className="text-xs text-slate-500 font-medium mt-0.5">Operational state for this episode of care</p>
@@ -484,7 +553,41 @@ const ClinicianPatientDetail: React.FC = () => {
                 </div>
               </div>
 
-              <div ref={chatSectionRef} className={`${clinPanel} overflow-hidden p-5`}>
+              <div className={`${clinPanel} overflow-hidden ${!showTimeline ? 'hidden lg:block' : ''}`}>
+                <div className={clinPanelHeader}>
+                  <h2 className="text-sm font-bold text-slate-900">Timeline</h2>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">Recent care events and follow-up timing</p>
+                </div>
+                <div className="p-5 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Opened</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{formatDt(consultation.opened_at)}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Last activity</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{consultation.last_activity_at ? formatDt(consultation.last_activity_at) : '—'}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Next appointment</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {consultation.next_appointment_at
+                        ? formatDt(consultation.next_appointment_at)
+                        : consultation.most_recent_appointment
+                          ? formatDt(String(consultation.most_recent_appointment))
+                          : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-slate-200 bg-white px-3 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Notifications</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {consultation.notification_count ?? 0} sent
+                      {(consultation.unread_notification_count ?? 0) > 0 ? ` · ${consultation.unread_notification_count} unread` : ''}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div ref={chatSectionRef} className={`${clinPanel} overflow-hidden p-5 ${!showChat ? 'hidden lg:block' : ''}`}>
                 <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                   <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                     <MessageCircle className="h-4 w-4 text-primary-600" aria-hidden />
@@ -509,7 +612,7 @@ const ClinicianPatientDetail: React.FC = () => {
         </div>
 
         {consultation ? (
-          <aside className="space-y-4 lg:sticky lg:top-4 self-start w-full">
+          <aside className={`space-y-4 lg:sticky lg:top-4 self-start w-full ${!showActions ? 'hidden lg:block' : ''}`}>
             <div className={`${clinPanel} overflow-hidden p-4`}>
               <h2 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Care actions</h2>
               <div className="space-y-2">

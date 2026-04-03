@@ -147,7 +147,7 @@ const ClinicianMessages: React.FC = () => {
       <ClinicianPageIntro
         eyebrow="Inbox"
         title="Messages"
-        description="Threads stay in sync while you work. Unread and in-progress cases surface first—open a row for the full thread or jump to the care workspace."
+        description="Unread and reply-needed threads surface first."
         actions={
           <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center sm:gap-2">
             {updatedLabel ? (
@@ -190,7 +190,7 @@ const ClinicianMessages: React.FC = () => {
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</div>
       ) : null}
 
-      <div className="grid lg:grid-cols-[360px_1fr] gap-4">
+      <div className="grid lg:grid-cols-[340px_1fr] gap-4">
         <div className={`rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden ${mobileThreadOpen ? 'hidden lg:block' : ''}`}>
           {loading ? (
             <div className="p-4 text-sm text-slate-600">Loading inbox…</div>
@@ -207,17 +207,22 @@ const ClinicianMessages: React.FC = () => {
                     setSelectedId(row.id);
                     setMobileThreadOpen(true);
                   }}
-                  className={`w-full text-left px-4 py-3 transition-colors hover:bg-slate-50 ${isActive ? 'bg-slate-50' : ''}`}
+                  className={`w-full text-left px-3.5 py-3 transition-colors hover:bg-slate-50 ${isActive ? 'bg-slate-50' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-900 truncate">{row.patient_name || `Patient #${row.patient}`}</p>
-                      <p className="text-xs text-slate-600 mt-1 line-clamp-2">
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <ConsultationStatusBadge status={row.status} priority={row.priority} />
+                        {row.thread_id && row.last_message_at ? (
+                          <span className="text-[11px] text-slate-500">
+                            {new Date(row.last_message_at).toLocaleDateString()}
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-slate-600 mt-2 line-clamp-2">
                         {row.last_message_preview || row.trigger_reason || 'Open thread'}
                       </p>
-                      <div className="mt-2">
-                        <ConsultationStatusBadge status={row.status} priority={row.priority} />
-                      </div>
                     </div>
                     <div className="text-right shrink-0">
                       {Number(row.unread_for_clinician || 0) > 0 ? (
@@ -225,9 +230,6 @@ const ClinicianMessages: React.FC = () => {
                           {row.unread_for_clinician}
                         </span>
                       ) : null}
-                      <p className="text-[11px] text-slate-500 mt-2">
-                        {row.last_message_at ? new Date(row.last_message_at).toLocaleString() : 'No messages yet'}
-                      </p>
                     </div>
                   </div>
                 </button>
@@ -255,9 +257,9 @@ const ClinicianMessages: React.FC = () => {
               <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{selectedCase.patient_name || `Patient #${selectedCase.patient}`}</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    Current status: <span className="font-medium text-slate-700">{selectedCase.status.replace(/_/g, ' ')}</span>
-                  </p>
+                  <div className="mt-1">
+                    <ConsultationStatusBadge status={selectedCase.status} priority={selectedCase.priority} />
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -288,9 +290,6 @@ const ClinicianMessages: React.FC = () => {
                   }}
                   onActivity={onChatActivity}
                 />
-                <div className="mt-3 text-xs text-slate-500">
-                  Need deeper context? Open the patient workspace for notes, appointments, and full care actions.
-                </div>
               </div>
             </>
           )}
