@@ -18,7 +18,6 @@ from .triage_engine import TriageEngine
 from .triage_service import triage_service
 from .nlp_utils import emotion_detector
 from .tasks import dispatch_background_task, send_alert_notification
-from .intent_recognizer import predict_intent, DEFAULT_CONFIDENCE_THRESHOLD
 from .identity import get_or_create_patient_for_request, resolve_identity
 from clinician.consultation_service import auto_assign_high_risk_patient_to_all_clinicians
 from .onboarding_service import build_user_state_summary_readonly
@@ -688,8 +687,10 @@ class ChatbotConversationViewSet(viewsets.ModelViewSet):
                 ],
             )
         
-        # Intent-based routing (Priority 2)
+        # Intent-based routing (Priority 2) — import here so screening/PHQ routes skip NLTK/sklearn load
         try:
+            from .intent_recognizer import predict_intent, DEFAULT_CONFIDENCE_THRESHOLD
+
             intent_tag, confidence = predict_intent(
                 user_message, 
                 return_confidence=True,

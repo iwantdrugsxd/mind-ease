@@ -14,6 +14,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Bake NLTK data into the image so chatbot first use does not download corpora at runtime.
+RUN python -c "\
+import nltk; \
+for p in ('punkt', 'stopwords', 'wordnet', 'omw-1.4'): \
+    nltk.download(p, quiet=True); \
+try: \
+    nltk.download('punkt_tab', quiet=True); \
+except Exception: \
+    pass"
+
 COPY . .
 
 RUN chmod +x docker-entrypoint.sh

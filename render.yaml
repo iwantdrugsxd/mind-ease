@@ -4,6 +4,9 @@
 #   FIREBASE_CREDENTIALS_JSON = full JSON of Firebase service account (Console → Project settings → Service accounts)
 #
 # Frontend already points to: https://mindcare-django-api.onrender.com/api (see frontend/public/runtime-config.js)
+#
+# Speed: free instances spin down after ~15 min idle; first request often takes 50s+ to wake. Upgrade to a paid
+# instance for always-on, or use an external uptime ping (respect Render fair use). WEB_CONCURRENCY=1 fits 512MB RAM.
 
 services:
   - type: web
@@ -22,6 +25,6 @@ services:
       - key: ALLOWED_HOSTS
         value: .onrender.com,localhost,127.0.0.1
       - key: WEB_CONCURRENCY
-        value: "2"
+        value: "1"
       - key: FIREBASE_CREDENTIALS_JSON
         sync: false
