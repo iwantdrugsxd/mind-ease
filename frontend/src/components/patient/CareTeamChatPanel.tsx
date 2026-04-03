@@ -166,7 +166,7 @@ export default function CareTeamChatPanel({
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white flex flex-col overflow-hidden shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white flex flex-col overflow-hidden shadow-sm min-h-[60vh]">
       <div className="px-5 py-4 border-b border-slate-200/90 flex flex-wrap items-center justify-between gap-3 bg-slate-50/70">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Conversation</p>
@@ -183,7 +183,7 @@ export default function CareTeamChatPanel({
           ) : null}
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 max-h-[min(460px,58vh)] bg-[linear-gradient(180deg,rgba(248,250,252,0.55),rgba(255,255,255,0.95))]">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3 max-h-[min(62vh,640px)] bg-[linear-gradient(180deg,rgba(248,250,252,0.55),rgba(255,255,255,0.95))]">
         {thread.messages.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white px-4 py-5 text-sm text-slate-600">
             No messages yet. Your care team may reach out here.
@@ -192,7 +192,7 @@ export default function CareTeamChatPanel({
           thread.messages.map((m) => (
             <div
               key={m.id}
-              className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm transition-shadow duration-300 ${
+              className={`max-w-[92%] sm:max-w-[82%] rounded-2xl px-3 sm:px-4 py-3 text-sm transition-shadow duration-300 ${
                 highlightIds.has(m.id) ? 'ring-2 ring-primary-400/80 ring-offset-1' : ''
               } ${
                 m.sender_type === 'patient'
@@ -219,7 +219,7 @@ export default function CareTeamChatPanel({
         <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
           Use this space for secure messages with your clinician or care team. For self-guided AI support, continue using Chatbot separately.
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <textarea
             className="flex-1 rounded-xl border border-slate-300 px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
             rows={2}
@@ -227,13 +227,11 @@ export default function CareTeamChatPanel({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
           />
-        </div>
-        <div className="mt-2 flex items-center justify-end">
           <button
             type="button"
             onClick={() => void onSend()}
             disabled={sending || !message.trim()}
-            className="px-4 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold disabled:opacity-50 hover:bg-slate-800"
+            className="sm:w-auto w-full px-4 py-3 rounded-lg bg-slate-900 text-white text-sm font-semibold disabled:opacity-50 hover:bg-slate-800"
           >
             {sending ? 'Sending…' : 'Send'}
           </button>

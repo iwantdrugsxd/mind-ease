@@ -29,7 +29,7 @@ const NavItem: React.FC<{ to: string; icon: React.ReactNode; label: string; end?
   </NavLink>
 );
 
-const ClinicianSidebar: React.FC = () => {
+const ClinicianSidebar: React.FC<{ mobileOpen?: boolean; onClose?: () => void }> = ({ mobileOpen = false, onClose }) => {
   const [summary, setSummary] = React.useState<ClinicianConsultationSummary | null>(null);
 
   const loadSummary = React.useCallback(async () => {
@@ -52,8 +52,15 @@ const ClinicianSidebar: React.FC = () => {
   useAuthenticatedEventStream('/clinician/me/consultation-events/', {
     onUpdate: () => void loadSummary(),
   });
+  const handleNav = () => onClose?.();
   return (
-    <aside className="w-56 lg:w-60 shrink-0 bg-slate-950 text-slate-100 min-h-screen flex flex-col border-r border-slate-800/90 shadow-[6px_0_32px_-8px_rgba(0,0,0,0.35)]">
+    <aside
+      className={[
+        'z-40 min-h-screen shrink-0 bg-slate-950 text-slate-100 flex flex-col border-r border-slate-800/90 shadow-[6px_0_32px_-8px_rgba(0,0,0,0.35)]',
+        'fixed inset-y-0 left-0 w-72 transition-transform duration-300 ease-out lg:static lg:w-56 xl:w-60 lg:translate-x-0',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+      ].join(' ')}
+    >
       <div className="p-4 border-b border-slate-800/90">
         <Link
           to="/clinicians"
@@ -70,9 +77,13 @@ const ClinicianSidebar: React.FC = () => {
       </div>
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto" aria-label="Clinician navigation">
         <p className="px-3 pt-1 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">Workspace</p>
-        <NavItem to="/clinician/dashboard" end icon={<LayoutDashboard className="h-4 w-4" />} label="Dashboard" />
+        <div onClick={handleNav}>
+          <NavItem to="/clinician/dashboard" end icon={<LayoutDashboard className="h-4 w-4" />} label="Dashboard" />
+        </div>
         <div className="relative">
-          <NavItem to="/clinician/consultations" icon={<ClipboardList className="h-4 w-4" />} label="Consultations" />
+          <div onClick={handleNav}>
+            <NavItem to="/clinician/consultations" icon={<ClipboardList className="h-4 w-4" />} label="Consultations" />
+          </div>
           {summary && (summary.total_actionable_cases > 0) ? (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary-500 text-white text-[10px] font-bold">
               {summary.total_actionable_cases}
@@ -80,19 +91,31 @@ const ClinicianSidebar: React.FC = () => {
           ) : null}
         </div>
         <div className="relative">
-          <NavItem to="/clinician/messages" icon={<MessageCircle className="h-4 w-4" />} label="Messages" />
+          <div onClick={handleNav}>
+            <NavItem to="/clinician/messages" icon={<MessageCircle className="h-4 w-4" />} label="Messages" />
+          </div>
           {summary && summary.unread_patient_replies > 0 ? (
             <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-violet-500 text-white text-[10px] font-bold">
               {summary.unread_patient_replies}
             </span>
           ) : null}
         </div>
-        <NavItem to="/clinician/patients" icon={<Users className="h-4 w-4" />} label="Patients" />
-        <NavItem to="/clinician/alerts" icon={<Bell className="h-4 w-4" />} label="Alerts" />
+        <div onClick={handleNav}>
+          <NavItem to="/clinician/patients" icon={<Users className="h-4 w-4" />} label="Patients" />
+        </div>
+        <div onClick={handleNav}>
+          <NavItem to="/clinician/alerts" icon={<Bell className="h-4 w-4" />} label="Alerts" />
+        </div>
         <p className="px-3 pt-5 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-600">Operations</p>
-        <NavItem to="/clinician/assignments" icon={<GitBranchPlus className="h-4 w-4" />} label="Assignments" />
-        <NavItem to="/clinician/appointments" icon={<Calendar className="h-4 w-4" />} label="Appointments" />
-        <NavItem to="/clinician/notes" icon={<FileText className="h-4 w-4" />} label="Notes" />
+        <div onClick={handleNav}>
+          <NavItem to="/clinician/assignments" icon={<GitBranchPlus className="h-4 w-4" />} label="Assignments" />
+        </div>
+        <div onClick={handleNav}>
+          <NavItem to="/clinician/appointments" icon={<Calendar className="h-4 w-4" />} label="Appointments" />
+        </div>
+        <div onClick={handleNav}>
+          <NavItem to="/clinician/notes" icon={<FileText className="h-4 w-4" />} label="Notes" />
+        </div>
       </nav>
       <div className="p-3 border-t border-slate-800/90 space-y-2">
         <Link

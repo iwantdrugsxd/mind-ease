@@ -13,7 +13,13 @@ const navItemBase =
 const navItemInactive = 'text-slate-600 hover:text-slate-900 hover:bg-slate-100';
 const navItemActive = 'bg-slate-900 text-white';
 
-export default function PatientSidebar() {
+export default function PatientSidebar({
+  mobileOpen = false,
+  onClose,
+}: {
+  mobileOpen?: boolean;
+  onClose?: () => void;
+}) {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const [careSummary, setCareSummary] = React.useState<PatientCareTeamSummary | null>(null);
@@ -55,9 +61,16 @@ export default function PatientSidebar() {
     careSummary?.unread_clinician_messages || 0,
     careSummary?.unread_notifications || 0
   );
+  const handleNav = () => onClose?.();
 
   return (
-    <aside className="h-full w-64 shrink-0 border-r border-slate-200 bg-white/80 backdrop-blur-sm">
+    <aside
+      className={[
+        'z-40 flex h-full flex-col border-r border-slate-200 bg-white/92 backdrop-blur-sm transition-transform duration-300 ease-out',
+        'fixed inset-y-0 left-0 w-72 shadow-2xl lg:static lg:w-64 lg:translate-x-0 lg:shadow-none',
+        mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+      ].join(' ')}
+    >
       <div className="p-4 border-b border-slate-200">
         <div className="flex items-center gap-2">
           <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center shadow-sm">
@@ -73,26 +86,26 @@ export default function PatientSidebar() {
           </div>
         </div>
       </div>
-      <nav className="p-3 space-y-1">
-        <NavLink to="/dashboard" className={linkClass} end>
+      <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        <NavLink to="/dashboard" className={linkClass} end onClick={handleNav}>
           <LayoutGrid className="h-4 w-4" />
           <span>Dashboard</span>
         </NavLink>
-        <NavLink to="/screening" className={linkClass}>
+        <NavLink to="/screening" className={linkClass} onClick={handleNav}>
           <ClipboardList className="h-4 w-4" />
           <span>Screening</span>
         </NavLink>
-        <NavLink to="/selfcare" className={linkClass}>
+        <NavLink to="/selfcare" className={linkClass} onClick={handleNav}>
           <Heart className="h-4 w-4" />
           <span>Self-Care</span>
         </NavLink>
-        <NavLink to="/chatbot" className={linkClass}>
+        <NavLink to="/chatbot" className={linkClass} onClick={handleNav}>
           <MessageCircle className="h-4 w-4" />
           <span>Chatbot</span>
         </NavLink>
         <p className="px-3 text-[10px] text-slate-400 leading-snug -mt-1 mb-1">AI-guided support</p>
         <div className="relative">
-          <NavLink to="/care-team" className={linkClass}>
+          <NavLink to="/care-team" className={linkClass} onClick={handleNav}>
             <MessageCircle className="h-4 w-4" />
             <span>Care Team</span>
           </NavLink>
@@ -105,7 +118,7 @@ export default function PatientSidebar() {
       </nav>
       <div className="mt-auto p-3 border-t border-slate-200">
         <button
-          onClick={onLogout}
+          onClick={() => void onLogout()}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition-colors"
         >
           <LogOut className="h-4 w-4" />

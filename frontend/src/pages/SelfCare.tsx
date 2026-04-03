@@ -582,7 +582,7 @@ const SelfCare: React.FC = () => {
 
         {/* Exercises Tab */}
         {activeTab === 'exercises' && (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {exerciseCards.map((exercise: any) => (
               <div
                 key={`${exercise.isRecommended ? 'recommended' : 'catalog'}-${exercise.id}`}
@@ -647,7 +647,7 @@ const SelfCare: React.FC = () => {
 
         {/* Pathways Tab */}
         {activeTab === 'pathways' && (
-          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
             {pathwayCatalog.map((pathway: any) => {
               const totalPathwayMinutes = pathway.exercises.reduce((sum: number, exercise: Exercise) => sum + Number(exercise.duration || 0), 0);
               return (

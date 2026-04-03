@@ -44,7 +44,67 @@ export default function ConsultationQueue({
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <table className="min-w-full text-sm">
+      <div className="lg:hidden divide-y divide-slate-100">
+        {rows.map((row) => {
+          const ps = row.patient_summary;
+          const phq = ps?.latest_phq9?.score ?? null;
+          const gad = ps?.latest_gad7?.score ?? null;
+          const unread = row.unread_for_clinician || 0;
+          return (
+            <div key={row.id} className="p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-900">{row.patient_name || `Patient #${row.patient}`}</div>
+                  <div className="text-xs text-slate-500">ID: {row.patient}</div>
+                </div>
+                <ClinicianRiskBadge level={ps?.overall_risk_level || 'unknown'} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <ConsultationStatusBadge status={row.status} priority={row.priority} />
+                {unread > 0 ? (
+                  <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-600 text-white">
+                    {unread} unread
+                  </span>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">PHQ-9</div>
+                  <div className="mt-1 font-semibold text-slate-900">{phq ?? '—'}</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">GAD-7</div>
+                  <div className="mt-1 font-semibold text-slate-900">{gad ?? '—'}</div>
+                </div>
+              </div>
+              <div className="text-sm text-slate-700 leading-relaxed">
+                {row.trigger_reason || '—'}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  onClick={() => onOpenPatient(row)}
+                  className="px-3 py-2 rounded-md bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+                >
+                  Open workspace
+                </button>
+                {row.thread_id ? (
+                  <button
+                    onClick={() => (onOpenChat ? onOpenChat(row) : navigate(`/clinician/patients/${row.patient}`))}
+                    title="Open chat"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-100"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    Open chat
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-slate-400 self-center sm:self-auto">No thread</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <table className="hidden lg:table min-w-full text-sm">
         <thead className="bg-slate-50 text-slate-700">
           <tr className="text-left">
             <th className="px-4 py-2 font-semibold">Patient</th>

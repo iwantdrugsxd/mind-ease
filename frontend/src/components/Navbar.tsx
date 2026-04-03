@@ -21,7 +21,7 @@ const Navbar: React.FC = () => {
   return (
     <nav className="bg-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+        <div className="flex justify-between h-16 gap-3">
           <div className="flex items-center">
             <Link to="/" className="flex items-center space-x-2">
               <Heart className="h-8 w-8 text-primary-600" />
@@ -103,27 +103,28 @@ const Navbar: React.FC = () => {
         {isMenuOpen && (
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-              <Link to="/" className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
+              <Link to="/" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
                 Home
               </Link>
               {user ? (
                 <>
                   <Link
                     to="/clinicians"
+                    onClick={() => setIsMenuOpen(false)}
                     className="text-slate-500 hover:text-slate-700 block px-3 py-2 rounded-md text-base font-medium"
                   >
                     For clinicians
                   </Link>
-                  <Link to="/screening" className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
+                  <Link to="/screening" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
                     Screening
                   </Link>
-                  <Link to="/selfcare" className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
+                  <Link to="/selfcare" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
                     Self-Care
                   </Link>
-                  <Link to="/chatbot" className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
+                  <Link to="/chatbot" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
                     Chatbot
                   </Link>
-                  <Link to="/dashboard" className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
+                  <Link to="/dashboard" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
                     Dashboard
                   </Link>
                   <div className="border-t border-gray-200 pt-4">
@@ -144,14 +145,15 @@ const Navbar: React.FC = () => {
                 <>
                   <Link
                     to="/clinicians"
+                    onClick={() => setIsMenuOpen(false)}
                     className="text-slate-600 hover:text-slate-900 block px-3 py-2 rounded-md text-base font-medium"
                   >
                     Clinicians
                   </Link>
-                  <Link to="/login" className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
+                  <Link to="/login" onClick={() => setIsMenuOpen(false)} className="text-gray-700 hover:text-primary-600 block px-3 py-2 rounded-md text-base font-medium">
                     Login
                   </Link>
-                  <Link to="/register" className="bg-primary-600 text-white hover:bg-primary-700 block px-3 py-2 rounded-md text-base font-medium">
+                  <Link to="/register" onClick={() => setIsMenuOpen(false)} className="bg-primary-600 text-white hover:bg-primary-700 block px-3 py-2 rounded-md text-base font-medium">
                     Register
                   </Link>
                 </>
@@ -165,7 +167,6 @@ const Navbar: React.FC = () => {
 };
 
 export default Navbar;
-
 
 
 

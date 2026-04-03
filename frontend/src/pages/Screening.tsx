@@ -266,7 +266,7 @@ const Screening: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setCurrentTest('phq9')}
-                  className="w-full sm:w-auto bg-slate-950 text-white px-6 sm:px-8 py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
+                  className="w-full bg-slate-950 text-white px-6 sm:px-8 py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
                 >
                   Start PHQ-9 Screening
                 </button>
@@ -290,7 +290,7 @@ const Screening: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setCurrentTest('gad7')}
-                  className="w-full sm:w-auto bg-slate-950 text-white px-6 sm:px-8 py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
+                  className="w-full bg-slate-950 text-white px-6 sm:px-8 py-3 rounded-xl font-medium hover:bg-slate-900 transition-colors touch-manipulation text-sm sm:text-base"
                 >
                   Start GAD-7 Screening
                 </button>

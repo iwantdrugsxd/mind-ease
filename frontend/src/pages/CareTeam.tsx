@@ -43,6 +43,7 @@ const CareTeam: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<PatientConsultationListRow | null>(null);
   const [notifications, setNotifications] = React.useState<CareNotification[]>([]);
+  const [mobileThreadOpen, setMobileThreadOpen] = React.useState(false);
 
   const load = React.useCallback(async (opts?: { soft?: boolean }) => {
     const soft = Boolean(opts?.soft);
@@ -98,6 +99,10 @@ const CareTeam: React.FC = () => {
   useIntervalWhenVisible(() => void load({ soft: true }), 45_000);
 
   const onThreadActivity = React.useCallback(() => void load({ soft: true }), [load]);
+  const onSelectCase = React.useCallback((row: PatientConsultationListRow) => {
+    setSelected(row);
+    setMobileThreadOpen(true);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -143,7 +148,7 @@ const CareTeam: React.FC = () => {
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[380px_1fr]">
-        <div className="space-y-4">
+        <div className={`space-y-4 ${mobileThreadOpen ? 'hidden xl:block' : ''}`}>
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -162,18 +167,29 @@ const CareTeam: React.FC = () => {
             cases={cases}
             loading={loading}
             selectedCaseId={selected?.id || null}
-            onSelect={(row) => setSelected(row)}
+            onSelect={onSelectCase}
           />
         </div>
 
-        <div>
+        <div className={`${!mobileThreadOpen ? 'hidden xl:block' : ''}`}>
           {selected ? (
-            <CareTeamChatPanel
-              caseId={selected.id}
-              onActivity={onThreadActivity}
-              refreshIntervalMs={35_000}
-              externalRefreshKey={liveThread.lastEventAt}
-            />
+            <div className="space-y-3">
+              <div className="flex xl:hidden">
+                <button
+                  type="button"
+                  onClick={() => setMobileThreadOpen(false)}
+                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm"
+                >
+                  Back to inbox
+                </button>
+              </div>
+              <CareTeamChatPanel
+                caseId={selected.id}
+                onActivity={onThreadActivity}
+                refreshIntervalMs={35_000}
+                externalRefreshKey={liveThread.lastEventAt}
+              />
+            </div>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700">
               Select a conversation to view private messages from your care team.

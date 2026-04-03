@@ -47,8 +47,8 @@ const ClinicianConsultations: React.FC = () => {
         title="Consultation cases"
         description="Your prioritized queue of assigned patients needing consultation. Filter by status or priority."
         actions={
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex items-center gap-1 mr-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex items-center gap-1 flex-wrap">
               <button
                 className="px-2 py-1 rounded-md text-xs border border-slate-300 hover:bg-slate-50"
                 onClick={() => setFilter({ status: 'awaiting_patient' })}
@@ -69,7 +69,7 @@ const ClinicianConsultations: React.FC = () => {
               </button>
             </div>
             <select
-              className="px-2 py-1 border border-slate-300 rounded-md text-sm"
+              className="px-2 py-2 border border-slate-300 rounded-md text-sm min-w-[160px]"
               value={filter.status || ''}
               onChange={(e) => setFilter((f) => ({ ...f, status: e.target.value || undefined }))}
             >
@@ -83,7 +83,7 @@ const ClinicianConsultations: React.FC = () => {
               <option value="closed">Closed</option>
             </select>
             <select
-              className="px-2 py-1 border border-slate-300 rounded-md text-sm"
+              className="px-2 py-2 border border-slate-300 rounded-md text-sm min-w-[160px]"
               value={filter.priority || ''}
               onChange={(e) => setFilter((f) => ({ ...f, priority: e.target.value || undefined }))}
             >

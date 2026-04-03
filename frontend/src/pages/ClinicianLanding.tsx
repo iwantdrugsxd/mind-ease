@@ -152,7 +152,7 @@ const ClinicianLanding: React.FC = () => {
       {/* Hero */}
       <section className="relative border-b border-slate-200/80">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 lg:py-28">
-          <div className="grid lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-16 items-center">
+          <div className="grid lg:grid-cols-[1.05fr_1fr] gap-10 lg:gap-16 items-center">
             <div>
               <div className="clinician-reveal inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-white/60 px-3 py-1.5 text-xs font-semibold text-slate-600 backdrop-blur-sm shadow-sm">
                 <Stethoscope className="h-4 w-4 text-primary-700" aria-hidden />
@@ -210,7 +210,7 @@ const ClinicianLanding: React.FC = () => {
       </section>
 
       {/* Why clinicians */}
-      <section className="relative py-20 sm:py-24">
+      <section className="relative py-16 sm:py-20 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-primary-800/80">Why clinicians use it</h2>

@@ -168,7 +168,7 @@ const Home: React.FC = () => {
       {/* Hero */}
       <section className="relative border-b border-slate-200/80">
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 lg:py-28">
-          <div className="grid lg:grid-cols-[1.05fr_1fr] gap-12 lg:gap-16 items-center">
+          <div className="grid lg:grid-cols-[1.05fr_1fr] gap-10 lg:gap-16 items-center">
             <div>
               <div className="clinician-reveal inline-flex items-center gap-2 rounded-full border border-slate-200/90 bg-white/60 px-3 py-1.5 text-xs font-semibold text-slate-600 backdrop-blur-sm shadow-sm">
                 <Heart className="h-4 w-4 text-primary-700" aria-hidden />
@@ -255,7 +255,7 @@ const Home: React.FC = () => {
       </section>
 
       {/* Why MindEase */}
-      <section className="relative py-20 sm:py-24">
+      <section className="relative py-16 sm:py-20 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-2xl">
             <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-primary-800/80">Why MindEase</h2>
@@ -265,7 +265,7 @@ const Home: React.FC = () => {
               platform.
             </p>
           </div>
-          <ul className="clinician-stagger mt-14 grid sm:grid-cols-2 gap-5 lg:gap-6">
+          <ul className="clinician-stagger mt-10 sm:mt-14 grid sm:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
             {benefits.map((b) => (
               <li
                 key={b.title}
@@ -283,7 +283,7 @@ const Home: React.FC = () => {
       </section>
 
       {/* How it works */}
-      <section className="relative py-20 sm:py-24 border-y border-slate-200/80 bg-gradient-to-b from-white via-slate-50/50 to-white">
+      <section className="relative py-16 sm:py-20 lg:py-24 border-y border-slate-200/80 bg-gradient-to-b from-white via-slate-50/50 to-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mb-12">
             <div>
@@ -317,7 +317,7 @@ const Home: React.FC = () => {
       </section>
 
       {/* Safety & crisis */}
-      <section className="relative py-20 sm:py-24">
+      <section className="relative py-16 sm:py-20 lg:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="relative rounded-3xl border border-slate-200/90 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-2xl shadow-slate-900/25 overflow-hidden">
             <div
@@ -397,7 +397,7 @@ const Home: React.FC = () => {
       </section>
 
       {/* Final CTA */}
-      <section className="relative py-20 sm:py-24 pb-28">
+      <section className="relative py-16 sm:py-20 lg:py-24 pb-24 sm:pb-28">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-3xl sm:text-4xl font-bold text-slate-950 tracking-tight">Start when you are ready</h2>
           <p className="mt-4 text-lg text-slate-600">

@@ -1,14 +1,16 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, Home } from 'lucide-react';
+import { LogOut, Home, Menu, X } from 'lucide-react';
 
 interface ClinicianHeaderProps {
   title: string;
   subtitle?: string;
+  mobileNavOpen?: boolean;
+  onMenuToggle?: () => void;
 }
 
-const ClinicianHeader: React.FC<ClinicianHeaderProps> = ({ title, subtitle }) => {
+const ClinicianHeader: React.FC<ClinicianHeaderProps> = ({ title, subtitle, mobileNavOpen = false, onMenuToggle }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -25,6 +27,14 @@ const ClinicianHeader: React.FC<ClinicianHeaderProps> = ({ title, subtitle }) =>
     <header className="h-[3.5rem] lg:h-[3.75rem] shrink-0 border-b border-slate-200/90 bg-white/90 backdrop-blur-lg flex items-stretch shadow-[inset_0_-1px_0_rgba(15,23,42,0.04)]">
       <div className="flex-1 flex items-center justify-between px-4 lg:px-8 gap-4 min-w-0">
         <div className="min-w-0 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onMenuToggle}
+            className="inline-flex lg:hidden items-center justify-center rounded-xl border border-slate-200 bg-white p-2 text-slate-700 shadow-sm"
+            aria-label={mobileNavOpen ? 'Close navigation' : 'Open navigation'}
+          >
+            {mobileNavOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
           <span className="hidden sm:block h-8 w-1 rounded-full bg-gradient-to-b from-primary-500 to-slate-800 shrink-0" aria-hidden />
           <div className="min-w-0">
             <h1 className="text-base lg:text-lg font-bold text-slate-900 tracking-tight truncate">{title}</h1>

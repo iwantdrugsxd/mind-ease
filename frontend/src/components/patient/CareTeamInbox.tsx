@@ -75,7 +75,7 @@ export default function CareTeamInbox({
             onClick={() => onSelect(c)}
           >
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="text-sm font-semibold text-slate-900">{toPatientStatus(c.status)}</div>
                   {c.next_appointment_at ? (
@@ -91,7 +91,7 @@ export default function CareTeamInbox({
                   </div>
                 ) : null}
               </div>
-              <div className="ml-3 flex shrink-0 flex-col items-end gap-2">
+              <div className="ml-3 flex shrink-0 flex-col items-end gap-2 text-right">
                 {unread > 0 ? (
                   <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary-600 text-white text-[11px] font-bold">
                     {unread}

@@ -409,7 +409,7 @@ const Register: React.FC = () => {
           )}
         </>
       ) : (
-      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow p-6">
+      <div className="max-w-2xl mx-auto bg-white rounded-xl shadow p-4 sm:p-6">
         {error && (
           <div className="mb-4 p-3 rounded-md bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
         )}
@@ -477,7 +477,7 @@ const Register: React.FC = () => {
               <div className="text-xs text-gray-500">
                 Phone/OTP and Google sign-in are not yet available in this build.
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button type="submit" disabled={loading} className="px-4 py-2 bg-primary-600 text-white rounded">
                   {loading ? 'Creating...' : 'Create account'}
                 </button>
@@ -497,7 +497,7 @@ const Register: React.FC = () => {
                   onChange={(e) => setDraft((d: any) => ({ ...d, profile: { ...(d.profile || {}), preferred_name: e.target.value } }))}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Birth year</label>
                   <input type="number" className="w-full border rounded px-3 py-2"
@@ -519,7 +519,7 @@ const Register: React.FC = () => {
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Occupation (optional)</label>
                   <input className="w-full border rounded px-3 py-2"
@@ -535,7 +535,7 @@ const Register: React.FC = () => {
                   />
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button onClick={goBack} className="px-4 py-2 border rounded">Back</button>
                 <button onClick={saveProfile} disabled={loading} className="px-4 py-2 bg-primary-600 text-white rounded">
                   {loading ? 'Saving...' : 'Save & Continue'}
@@ -548,7 +548,7 @@ const Register: React.FC = () => {
         {currentStep === 'baseline' && (
           <>
             <StepHeader title="Your current baseline" />
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {['mood_baseline','sleep_quality_baseline','stress_level_baseline'].map((k) => (
                 <div key={k}>
                   <label className="block text-sm text-gray-700 mb-1">{k.replace('_',' ').replace('baseline','').trim()}</label>
@@ -579,7 +579,7 @@ const Register: React.FC = () => {
                 onChange={(e) => setDraft((d: any) => ({ ...d, baseline: { ...(d.baseline || {}), goals_text: e.target.value, goals: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) } }))}
               />
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
               <button onClick={goBack} className="px-4 py-2 border rounded">Back</button>
               <button onClick={saveBaseline} disabled={loading} className="px-4 py-2 bg-primary-600 text-white rounded">
                 {loading ? 'Saving...' : 'Save & Continue'}
@@ -614,7 +614,7 @@ const Register: React.FC = () => {
                 <span>Optional: Allow clinician access to my data.</span>
               </label>
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
               <button onClick={goBack} className="px-4 py-2 border rounded">Back</button>
               <button onClick={saveConsent} disabled={loading} className="px-4 py-2 bg-primary-600 text-white rounded">
                 {loading ? 'Saving...' : 'Save & Continue'}
@@ -640,7 +640,7 @@ const Register: React.FC = () => {
                   <option value="night">Night</option>
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Emergency contact (optional)</label>
                   <input className="w-full border rounded px-3 py-2"
@@ -657,7 +657,7 @@ const Register: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
               <button onClick={goBack} className="px-4 py-2 border rounded">Back</button>
               <button onClick={saveAdvanced} disabled={loading} className="px-4 py-2 bg-primary-600 text-white rounded">
                 {loading ? 'Saving...' : 'Save & Finish'}

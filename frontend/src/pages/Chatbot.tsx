@@ -444,8 +444,8 @@ const Chatbot: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_-18px_rgba(15,23,42,0.18)] flex flex-col" style={{ height: 'calc(100vh - 18rem)', minHeight: '620px' }}>
+    <div className="space-y-4 sm:space-y-6">
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_1px_3px_rgba(15,23,42,0.06),0_14px_34px_-18px_rgba(15,23,42,0.18)] flex flex-col min-h-[72vh] sm:min-h-[620px]">
         <div className="border-b border-slate-200 bg-slate-50/80 px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -460,7 +460,7 @@ const Chatbot: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 md:p-6 space-y-4 bg-[linear-gradient(180deg,rgba(248,250,252,0.55),rgba(255,255,255,0.96))]">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 space-y-4 bg-[linear-gradient(180deg,rgba(248,250,252,0.55),rgba(255,255,255,0.96))]">
             {messages.length === 0 ? (
               <div className="text-center text-slate-500 py-12 sm:py-16">
                 <div className="h-16 w-16 sm:h-20 sm:w-20 mx-auto mb-4 rounded-2xl bg-slate-100 flex items-center justify-center">
@@ -487,7 +487,7 @@ const Chatbot: React.FC = () => {
                   )}
                   
                   <div
-                    className={`max-w-[85%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl shadow-sm ${
+                    className={`max-w-[92%] sm:max-w-xs lg:max-w-md px-3 sm:px-4 py-2.5 sm:py-3 rounded-2xl shadow-sm ${
                       message.message_type === 'user'
                         ? 'bg-slate-950 text-white rounded-tr-md'
                         : 'bg-white text-slate-900 border border-slate-200 rounded-tl-md'
@@ -543,26 +543,26 @@ const Chatbot: React.FC = () => {
             <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-relaxed text-slate-600">
               Chatbot helps with reflection and guided support. For clinician follow-up or secure care communication, use Care Team separately.
             </div>
-            <div className="flex gap-2 sm:gap-3">
+            <div className="flex gap-2 sm:gap-3 items-end">
               <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyPress}
                 placeholder={conversation ? "Type your message..." : "Initializing chatbot..."}
                 className="flex-1 px-3 sm:px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent resize-none disabled:bg-slate-100 disabled:cursor-not-allowed text-sm sm:text-base"
-                rows={2}
+                rows={3}
                 disabled={isLoading || isInitializing}
               />
               <button
                 onClick={handleSendMessage}
                 disabled={!inputMessage.trim() || isLoading || isInitializing}
-                className="bg-slate-950 text-white px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all touch-manipulation"
+                className="shrink-0 bg-slate-950 text-white px-4 sm:px-6 py-3 rounded-xl hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center transition-all touch-manipulation"
               >
                 <Send className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-slate-500 px-1">
+              <p className="text-xs text-slate-500 px-1 w-full sm:w-auto">
                 Press Enter to send, Shift+Enter for new line
               </p>
               {messages.length > 0 ? <QuickReplies /> : null}

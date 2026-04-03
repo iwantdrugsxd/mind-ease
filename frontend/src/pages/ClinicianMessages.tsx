@@ -47,6 +47,7 @@ const ClinicianMessages: React.FC = () => {
   const [selectedCase, setSelectedCase] = React.useState<ConsultationCaseDetail | null>(null);
   const [mode, setMode] = React.useState<'all' | 'unread' | 'needs_reply'>('all');
   const [listUpdatedAt, setListUpdatedAt] = React.useState<number | null>(null);
+  const [mobileThreadOpen, setMobileThreadOpen] = React.useState(false);
   const navigate = useNavigate();
   const selectedIdRef = React.useRef<number | null>(null);
   selectedIdRef.current = selectedId;
@@ -190,7 +191,7 @@ const ClinicianMessages: React.FC = () => {
       ) : null}
 
       <div className="grid lg:grid-cols-[360px_1fr] gap-4">
-        <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden">
+        <div className={`rounded-xl border border-slate-200 bg-white divide-y divide-slate-100 overflow-hidden ${mobileThreadOpen ? 'hidden lg:block' : ''}`}>
           {loading ? (
             <div className="p-4 text-sm text-slate-600">Loading inbox…</div>
           ) : visibleRows.length === 0 ? (
@@ -202,7 +203,10 @@ const ClinicianMessages: React.FC = () => {
                 <button
                   key={row.id}
                   type="button"
-                  onClick={() => setSelectedId(row.id)}
+                  onClick={() => {
+                    setSelectedId(row.id);
+                    setMobileThreadOpen(true);
+                  }}
                   className={`w-full text-left px-4 py-3 transition-colors hover:bg-slate-50 ${isActive ? 'bg-slate-50' : ''}`}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -232,13 +236,22 @@ const ClinicianMessages: React.FC = () => {
           )}
         </div>
 
-        <div className="space-y-4">
+        <div className={`space-y-4 ${!mobileThreadOpen ? 'hidden lg:block' : ''}`}>
           {!selectedCase ? (
             <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-700">
               Select a thread to continue a patient conversation.
             </div>
           ) : (
             <>
+              <div className="flex lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => setMobileThreadOpen(false)}
+                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm"
+                >
+                  Back to inbox
+                </button>
+              </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{selectedCase.patient_name || `Patient #${selectedCase.patient}`}</p>

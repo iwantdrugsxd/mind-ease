@@ -127,7 +127,7 @@ const ClinicianDashboard: React.FC = () => {
 
       {/* Consultation queue */}
       {summaryStats ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
           <div className="rounded-lg border border-slate-200 bg-white p-3">
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Unread replies</p>
             <p className="text-xl font-bold text-slate-900">{summaryStats.unread_patient_replies}</p>
