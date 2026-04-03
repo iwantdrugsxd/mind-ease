@@ -1,6 +1,7 @@
 {
   "projects": {
-    "default": "mindcare-mental-health-a1a1f"
+    "default": "mindcare-mental-health-a1a1f",
+    "e-mental": "e-mental-health-a1a1f"
   }
 }
 

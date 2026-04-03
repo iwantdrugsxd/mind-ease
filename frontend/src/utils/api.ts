@@ -10,7 +10,12 @@ declare global {
 const DEFAULT_LOCAL_API = 'http://localhost:8000/api';
 
 function normalizeApiRoot(url: string): string {
-  return url.replace(/\/+$/, '');
+  const trimmed = url.replace(/\/+$/, '');
+  // Same-origin relative API (Firebase proxy): keep leading slash
+  if (trimmed === '/api' || trimmed.startsWith('/api/')) {
+    return trimmed;
+  }
+  return trimmed;
 }
 
 function looksLikeLocalhostApi(url: string): boolean {
@@ -42,6 +47,18 @@ const getApiBaseUrl = (): string => {
   }
   if (envDev && !looksLikeLocalhostApi(envDev)) {
     return normalizeApiRoot(envDev);
+  }
+
+  // Hosted Firebase: never fall back to visitor localhost (runtime-config.js should set a public URL)
+  const isHostedFirebase =
+    /\.web\.app$/i.test(host) || /\.firebaseapp\.com$/i.test(host);
+  if (isHostedFirebase) {
+    const fallback =
+      process.env.REACT_APP_API_BASE_URL_PRODUCTION?.trim() ||
+      'https://mindcare-django-api.onrender.com/api';
+    if (!looksLikeLocalhostApi(fallback)) {
+      return normalizeApiRoot(fallback);
+    }
   }
 
   return normalizeApiRoot(DEFAULT_LOCAL_API);

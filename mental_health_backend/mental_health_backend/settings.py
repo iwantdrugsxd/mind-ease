@@ -145,6 +145,8 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "https://mindcare-mental-health-a1a1f.web.app",
     "https://mindcare-mental-health-a1a1f.firebaseapp.com",
+    "https://e-mental-health-a1a1f.web.app",
+    "https://e-mental-health-a1a1f.firebaseapp.com",
 ]
 
 extra_cors = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
