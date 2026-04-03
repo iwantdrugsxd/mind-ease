@@ -93,6 +93,7 @@ export async function getApiAuthToken(): Promise<string | null> {
 // Create axios instance with default config
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 120_000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -121,16 +122,25 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Handle connection errors
-    if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error') || error.message?.includes('ERR_CONNECTION_REFUSED')) {
+    // Handle connection errors (includes many CORS failures surfacing as "Network Error")
+    const isNetworkFail =
+      error.code === 'ERR_NETWORK' ||
+      error.code === 'ECONNABORTED' ||
+      error.message?.includes('Network Error') ||
+      error.message?.includes('timeout') ||
+      error.message?.includes('ERR_CONNECTION_REFUSED');
+
+    if (isNetworkFail) {
       const isProduction = window.location.hostname !== 'localhost' && 
                            window.location.hostname !== '127.0.0.1';
       
       if (isProduction) {
         console.error('Backend server is not accessible. Please ensure the backend is running and accessible.');
+        const renderHint =
+          'If the API host is on Render but you still see this, the service may not exist yet (Render returns "no-server" until you deploy). Open https://dashboard.render.com → New → Blueprint, connect this repo, apply render.yaml, then set environment variable FIREBASE_CREDENTIALS_JSON to your Firebase service account JSON (same project as the app). After the first successful deploy, wait up to 2 minutes for a cold start and try again.';
         const hint = isHostedAppCallingLocalApi()
-          ? 'Hosted apps cannot use http://localhost:8000 (that is the visitor\'s device). Set API_BASE_URL in frontend/public/runtime-config.js to your public API (e.g. https://your-app.onrender.com/api), then run npm run build and firebase deploy --only hosting. Or use a tunnel: bash scripts/tunnel-django.sh with Django on port 8000, paste the HTTPS URL + /api into runtime-config.js, rebuild, and redeploy. Ensure Django allows CORS for this Firebase origin.'
-          : 'Please ensure the backend is running and reachable at the configured API URL.';
+          ? 'Hosted apps cannot use http://localhost:8000. Set API_BASE_URL in frontend/public/runtime-config.js to your public https://…/api, rebuild, and redeploy Firebase Hosting.'
+          : `${renderHint} CORS is configured for all *.web.app and *.firebaseapp.com origins.`;
         return Promise.reject({
           ...error,
           message: `Cannot reach the API (${API_BASE_URL}). ${hint}`,

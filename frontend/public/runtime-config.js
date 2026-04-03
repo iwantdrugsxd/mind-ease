@@ -1,10 +1,10 @@
 /**
- * Public Django API for Firebase Hosting (must be https:// on the internet).
- * Default matches render.yaml service name "mindcare-django-api".
- * Deploy backend: https://dashboard.render.com → New → Blueprint → connect this repo (or Web Service with mental_health_backend/Dockerfile).
- * If your Render URL differs, change the string below, then: cd frontend && npm run build && firebase deploy --only hosting
+ * Django API (must be deployed). Default matches render.yaml → service "mindcare-django-api".
  *
- * Blaze plan alternative: same-origin /api via Cloud Functions proxy (see git history or Firebase docs).
+ * Deploy once: https://dashboard.render.com → New → Blueprint → connect repo → apply render.yaml.
+ * Then set FIREBASE_CREDENTIALS_JSON on that service (Firebase Console → Project settings → Service accounts).
+ *
+ * First request after idle can take 1–2 minutes (Render free tier cold start).
  */
 window.__RUNTIME_CONFIG__ = window.__RUNTIME_CONFIG__ || {};
 window.__RUNTIME_CONFIG__.API_BASE_URL =

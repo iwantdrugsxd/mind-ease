@@ -153,6 +153,12 @@ extra_cors = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(','
 if extra_cors:
     CORS_ALLOWED_ORIGINS = list(dict.fromkeys(CORS_ALLOWED_ORIGINS + extra_cors))
 
+# Any Firebase Hosting / Firebase Auth hosted domain (covers e-mental-*, mindcare-*, future projects)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https://[\w-]+\.web\.app$',
+    r'^https://[\w-]+\.firebaseapp\.com$',
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
 # REST Framework settings
