@@ -104,11 +104,23 @@ DATABASES = {
 # Ephemeral SQLite on Render loses data on redeploy / disk reset.
 _database_url = os.getenv('DATABASE_URL', '').strip()
 if _database_url:
-    DATABASES['default'] = dj_database_url.config(
+    # conn_max_age=0: safe with gunicorn --preload + forked workers (avoids shared/broken connections).
+    # Override with DB_CONN_MAX_AGE if you use a single process and want pooling.
+    _db = dj_database_url.config(
         default=_database_url,
-        conn_max_age=600,
+        conn_max_age=int(os.getenv('DB_CONN_MAX_AGE', '0')),
         conn_health_checks=True,
     )
+    if _db.get('ENGINE') == 'django.db.backends.postgresql':
+        _opts = _db.setdefault('OPTIONS', {})
+        # Set DATABASE_SSLMODE=require if your host needs TLS and the URL omits sslmode (Neon, many cloud PGs).
+        _ssl = os.getenv('DATABASE_SSLMODE', '').strip()
+        if _ssl:
+            _opts['sslmode'] = _ssl
+        # Transaction poolers (PgBouncer in transaction mode) break server-side cursors.
+        if os.getenv('DATABASE_DISABLE_SERVER_CURSORS', '').lower() in ('1', 'true', 'yes'):
+            _db['DISABLE_SERVER_SIDE_CURSORS'] = True
+    DATABASES['default'] = _db
 
 
 # Password validation

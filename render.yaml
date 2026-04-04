@@ -36,3 +36,6 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      # If Postgres errors with SSL or pooler issues, add in Dashboard:
+      #   DATABASE_SSLMODE=require
+      #   DATABASE_DISABLE_SERVER_CURSORS=true   (Neon / PgBouncer transaction mode)
