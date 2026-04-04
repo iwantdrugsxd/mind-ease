@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+import dj_database_url
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -34,6 +35,11 @@ DEBUG = os.getenv('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
 _default_hosts = 'localhost,127.0.0.1,.onrender.com'
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', _default_hosts).split(',') if h.strip()]
+
+# Render / reverse proxy: correct scheme/host so redirects and security checks match the public URL
+if os.getenv('TRUST_PROXY_SSL', '').lower() in ('1', 'true', 'yes'):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
 
 
 # Application definition
@@ -93,6 +99,16 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# Persistent storage on Render: set DATABASE_URL to PostgreSQL (Render Postgres, Neon, Supabase, etc.).
+# Ephemeral SQLite on Render loses data on redeploy / disk reset.
+_database_url = os.getenv('DATABASE_URL', '').strip()
+if _database_url:
+    DATABASES['default'] = dj_database_url.config(
+        default=_database_url,
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
 
 
 # Password validation
@@ -160,6 +176,14 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Explicit headers for credentialed cross-origin API calls (Authorization, etc.)
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_HEADERS = list(default_headers)
+
+# Django 4+ CSRF for session-based admin (optional); helps if any same-site quirks
+CSRF_TRUSTED_ORIGINS = list(CORS_ALLOWED_ORIGINS)
 
 # REST Framework settings
 REST_FRAMEWORK = {

@@ -3,6 +3,10 @@
 # Required after first deploy (Dashboard → your web service → Environment):
 #   FIREBASE_CREDENTIALS_JSON = full JSON of Firebase service account (Console → Project settings → Service accounts)
 #
+# Persistent data: create a PostgreSQL instance (Render → New → PostgreSQL, or free tier on neon.tech),
+# copy its connection string into DATABASE_URL on this web service. Without it, SQLite on the container
+# disk is wiped when the instance is redeployed or reset.
+#
 # Frontend already points to: https://mindcare-django-api.onrender.com/api (see frontend/public/runtime-config.js)
 #
 # Speed: free instances spin down after ~15 min idle; first request often takes 50s+ to wake. Upgrade to a paid
@@ -20,6 +24,8 @@ services:
     envVars:
       - key: DJANGO_DEBUG
         value: "false"
+      - key: TRUST_PROXY_SSL
+        value: "true"
       - key: DJANGO_SECRET_KEY
         generateValue: true
       - key: ALLOWED_HOSTS
@@ -27,4 +33,6 @@ services:
       - key: WEB_CONCURRENCY
         value: "1"
       - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+      - key: DATABASE_URL
         sync: false
