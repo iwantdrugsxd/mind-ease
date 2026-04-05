@@ -83,6 +83,9 @@ export function useAuthenticatedEventStream(path: string | null, options?: Optio
         return;
       }
 
+      /** Do not retry: auth succeeded at Firebase but backend denies this user (identity mismatch, not approved, etc.). */
+      let stopReconnect = false;
+
       controller = new AbortController();
       setConnected(false);
       try {
@@ -97,6 +100,16 @@ export function useAuthenticatedEventStream(path: string | null, options?: Optio
           credentials: 'include',
           signal: controller.signal,
         });
+        if (response.status === 401 || response.status === 403) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(
+              `[SSE] ${path} returned ${response.status}; not reconnecting (fix backend user↔clinician identity or redeploy API).`
+            );
+          }
+          stopReconnect = true;
+          setConnected(false);
+          return;
+        }
         if (!response.ok || !response.body) {
           throw new Error(`Stream failed with status ${response.status}`);
         }
@@ -124,7 +137,7 @@ export function useAuthenticatedEventStream(path: string | null, options?: Optio
       } finally {
         controller = null;
         setConnected(false);
-        if (!disposed) scheduleReconnect();
+        if (!disposed && !stopReconnect) scheduleReconnect();
       }
     };
 
