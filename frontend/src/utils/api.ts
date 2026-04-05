@@ -157,18 +157,26 @@ api.interceptors.response.use(
     }
     
     if (error.response?.status === 401) {
-      // Avoid destructive redirect loops during token bootstrap while Firebase user is present.
-      let hasFirebaseUser = false;
-      try {
-        hasFirebaseUser = !!getAuth().currentUser;
-      } catch {
-        hasFirebaseUser = false;
-      }
+      // Wait for Firebase to restore session on reload before treating 401 as logged out.
+      return (async () => {
+        let hasFirebaseUser = false;
+        try {
+          const auth = getAuth();
+          if (typeof auth.authStateReady === 'function') {
+            await auth.authStateReady();
+          }
+          hasFirebaseUser = !!auth.currentUser;
+        } catch {
+          hasFirebaseUser = false;
+        }
 
-      if (!hasFirebaseUser) {
-        localStorage.removeItem('authToken');
-        window.location.href = '/login';
-      }
+        if (!hasFirebaseUser) {
+          localStorage.removeItem('authToken');
+          const path = window.location.pathname || '';
+          window.location.href = path.startsWith('/clinician') ? '/clinician/login' : '/login';
+        }
+        return Promise.reject(error);
+      })();
     }
     return Promise.reject(error);
   }

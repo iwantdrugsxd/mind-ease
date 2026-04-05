@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, onIdTokenChanged, User } from 'firebase/auth';
+import {
+  getAuth,
+  onAuthStateChanged,
+  onIdTokenChanged,
+  setPersistence,
+  browserLocalPersistence,
+  User,
+} from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -48,6 +55,9 @@ if (isDemoConfig) {
   try {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    void setPersistence(auth, browserLocalPersistence).catch(() => {
+      // e.g. storage blocked — auth may still work for the session
+    });
     db = getFirestore(app);
     console.log('✅ Firebase initialized successfully');
     console.log('✅ Firebase Auth Domain:', firebaseConfig.authDomain);

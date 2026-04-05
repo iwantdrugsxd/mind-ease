@@ -19,11 +19,15 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { auth, user: firebaseUser, db } = useFirebase();
+  const { auth, user: firebaseUser, loading: firebaseAuthLoading, db } = useFirebase();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
 
+  // Must wait for Firebase's first onAuthStateChanged before treating null as "signed out",
+  // otherwise a full page reload briefly shows no user and routes redirect to login.
   useEffect(() => {
+    if (firebaseAuthLoading) {
+      return;
+    }
     if (firebaseUser) {
       setUser({
         id: firebaseUser.uid,
@@ -33,8 +37,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       setUser(null);
     }
-    setLoading(false);
-  }, [firebaseUser]);
+  }, [firebaseUser, firebaseAuthLoading]);
+
+  const loading = firebaseAuthLoading;
 
   const bootstrapAuthToken = async (firebaseUser: any): Promise<string | null> => {
     if (!firebaseUser || typeof firebaseUser.getIdToken !== 'function') return null;
