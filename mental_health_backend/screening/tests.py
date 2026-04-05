@@ -10,6 +10,7 @@ from rest_framework.test import APITestCase
 
 from .firebase_auth import FirebaseAuthentication
 from .models import (
+    FirebaseIdentityLink,
     Patient,
     PHQ9Screening,
     GAD7Screening,
@@ -60,6 +61,8 @@ class FirebaseAuthenticationTests(TestCase):
         user, decoded = self.authenticator.authenticate(request)
         self.assertEqual(user.id, existing_user.id)
         self.assertEqual(decoded.get("uid"), "uid-123")
+        link = FirebaseIdentityLink.objects.get(firebase_uid="uid-123")
+        self.assertEqual(link.user_id, existing_user.id)
 
     @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
     @patch("screening.firebase_auth.auth.verify_id_token")
@@ -93,6 +96,8 @@ class FirebaseAuthenticationTests(TestCase):
         self.assertEqual(user.id, existing_user.id)
         self.assertEqual(decoded.get("uid"), "firebase-clinician-uid")
         self.assertEqual(User.objects.filter(email="clinician@example.com").count(), 1)
+        link = FirebaseIdentityLink.objects.get(firebase_uid="firebase-clinician-uid")
+        self.assertEqual(link.user_id, existing_user.id)
 
     @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
     @patch("screening.firebase_auth.auth.verify_id_token")
@@ -113,6 +118,40 @@ class FirebaseAuthenticationTests(TestCase):
         self.assertEqual(decoded.get("uid"), "brand-new-uid")
         self.assertEqual(user.username, "firebase_brand-new-uid")
         self.assertEqual(user.email, "brand-new@example.com")
+        link = FirebaseIdentityLink.objects.get(firebase_uid="brand-new-uid")
+        self.assertEqual(link.user_id, user.id)
+
+    @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
+    @patch("screening.firebase_auth.auth.verify_id_token")
+    def test_rejects_when_firebase_uid_is_already_linked_to_another_user(self, verify_mock, _init_mock):
+        existing_user = User.objects.create_user(username="linked_user", email="linked@example.com")
+        FirebaseIdentityLink.objects.create(
+            user=existing_user,
+            firebase_uid="uid-linked",
+            email="linked@example.com",
+        )
+        other_user = User.objects.create_user(username="other_user", email="other@example.com")
+        Clinician.objects.create(
+            user=other_user,
+            license_number="LIC-CONFLICT",
+            specialization="Therapy",
+            phone_number="9999999998",
+            status=Clinician.Status.APPROVED,
+        )
+        verify_mock.return_value = {
+            "uid": "uid-linked",
+            "email": "other@example.com",
+            "name": "Other User",
+        }
+
+        request = self.factory.get(
+            "/api/clinician/auth/status/",
+            HTTP_AUTHORIZATION="Bearer conflict-token",
+        )
+        request.user = AnonymousUser()
+
+        with self.assertRaises(AuthenticationFailed):
+            self.authenticator.authenticate(request)
 
     @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
     @patch("screening.firebase_auth.auth.verify_id_token")

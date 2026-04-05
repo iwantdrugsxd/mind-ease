@@ -73,13 +73,63 @@ def initialize_firebase_admin() -> bool:
         return False
 
 
+def _upsert_firebase_identity_link(user: User, firebase_uid: str, email: str = "") -> User:
+    from .models import FirebaseIdentityLink
+
+    if not user:
+        raise AuthenticationFailed("Cannot link Firebase account without a backend user.")
+
+    existing_uid_link = FirebaseIdentityLink.objects.select_related("user").filter(firebase_uid=firebase_uid).first()
+    if existing_uid_link:
+        if existing_uid_link.user_id != user.id:
+            raise AuthenticationFailed("This Firebase account is already linked to a different backend account.")
+        if email and existing_uid_link.email != email:
+            existing_uid_link.email = email
+            existing_uid_link.save(update_fields=["email", "updated_at"])
+        return user
+
+    existing_user_link = FirebaseIdentityLink.objects.filter(user=user).first()
+    if existing_user_link:
+        if existing_user_link.firebase_uid != firebase_uid:
+            raise AuthenticationFailed("This backend account is already linked to a different Firebase account.")
+        if email and existing_user_link.email != email:
+            existing_user_link.email = email
+            existing_user_link.save(update_fields=["email", "updated_at"])
+        return user
+
+    FirebaseIdentityLink.objects.create(
+        user=user,
+        firebase_uid=firebase_uid,
+        email=email or user.email or "",
+    )
+    return user
+
+
 def resolve_user_from_firebase_uid(firebase_uid: str, decoded_token: Optional[Dict[str, Any]] = None) -> User:
-    from .models import Patient
+    from .models import FirebaseIdentityLink, Patient
     from clinician.models import Clinician
+
+    linked_user_id = (
+        FirebaseIdentityLink.objects.filter(firebase_uid=firebase_uid)
+        .values_list("user_id", flat=True)
+        .first()
+    )
+    if linked_user_id:
+        user = User.objects.get(id=linked_user_id)
+        email = (decoded_token.get("email") or "").strip().lower() if decoded_token else ""
+        user_email = (user.email or "").strip().lower()
+        if email and user_email and email != user_email:
+            raise AuthenticationFailed("This Firebase account is already linked to a different backend account.")
+        return _upsert_firebase_identity_link(user, firebase_uid, email=email)
 
     patient = Patient.objects.select_related("user").filter(firebase_uid=firebase_uid).first()
     if patient:
-        return patient.user
+        email = (decoded_token.get("email") or "").strip().lower() if decoded_token else ""
+        pu = patient.user
+        patient_email = (pu.email or "").strip().lower()
+        if email and patient_email and email != patient_email:
+            raise AuthenticationFailed("This Firebase account is already linked to a different backend account.")
+        return _upsert_firebase_identity_link(pu, firebase_uid, email=email)
 
     email = ""
     first_name = "Firebase"
@@ -103,7 +153,7 @@ def resolve_user_from_firebase_uid(firebase_uid: str, decoded_token: Optional[Di
             .distinct()
         )
         if len(clinician_user_ids) == 1:
-            return User.objects.get(id=clinician_user_ids[0])
+            return _upsert_firebase_identity_link(User.objects.get(id=clinician_user_ids[0]), firebase_uid, email=email)
         if len(clinician_user_ids) > 1:
             logger.warning(
                 "Ambiguous Firebase email %r matches %d clinician user rows; skipping clinician email link.",
@@ -113,7 +163,7 @@ def resolve_user_from_firebase_uid(firebase_uid: str, decoded_token: Optional[Di
 
         matching_users = list(User.objects.filter(email__iexact=email).order_by("id"))
         if len(matching_users) == 1:
-            return matching_users[0]
+            return _upsert_firebase_identity_link(matching_users[0], firebase_uid, email=email)
         if len(matching_users) > 1:
             logger.warning(
                 "Ambiguous Firebase email %r matches %d Django user rows; skipping generic email link.",
@@ -130,7 +180,7 @@ def resolve_user_from_firebase_uid(firebase_uid: str, decoded_token: Optional[Di
             "last_name": last_name,
         },
     )
-    return user
+    return _upsert_firebase_identity_link(user, firebase_uid, email=email)
 
 
 class FirebaseAuthentication(authentication.BaseAuthentication):

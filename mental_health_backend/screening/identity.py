@@ -30,7 +30,8 @@ def resolve_identity(request, allow_legacy_firebase_uid: bool = True) -> Tuple[O
         if patient:
             return patient.user, patient, verified_uid
         if request.user.is_authenticated:
-            return request.user, None, verified_uid
+            patient_for_user = Patient.objects.select_related("user").filter(user=request.user).first()
+            return request.user, patient_for_user, verified_uid
         return None, None, verified_uid
 
     if request.user.is_authenticated:
@@ -51,6 +52,12 @@ def resolve_identity(request, allow_legacy_firebase_uid: bool = True) -> Tuple[O
 def get_or_create_patient_for_request(request, allow_legacy_firebase_uid: bool = True) -> Tuple[Optional[User], Optional[Patient], str]:
     user, patient, firebase_uid = resolve_identity(request, allow_legacy_firebase_uid=allow_legacy_firebase_uid)
     if patient:
+        if firebase_uid and patient.firebase_uid != firebase_uid:
+            conflict = Patient.objects.filter(firebase_uid=firebase_uid).exclude(id=patient.id).exists()
+            if not conflict:
+                patient.firebase_uid = firebase_uid
+                patient.save(update_fields=["firebase_uid", "updated_at"])
+            return user, patient, patient.firebase_uid
         return user, patient, firebase_uid
 
     if not firebase_uid and user:

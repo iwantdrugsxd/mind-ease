@@ -17,6 +17,21 @@ class Patient(models.Model):
         return f"{self.user.first_name} {self.user.last_name}"
 
 
+class FirebaseIdentityLink(models.Model):
+    """
+    Canonical 1:1 mapping between a Firebase account and the backend user account.
+    This prevents silent duplicate Django users when Firebase tokens are resolved.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="firebase_identity_link")
+    firebase_uid = models.CharField(max_length=255, unique=True)
+    email = models.EmailField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.firebase_uid} -> {self.user.username}"
+
+
 class PatientProfile(models.Model):
     """Basic profile captured during onboarding."""
     GENDER_CHOICES = [
