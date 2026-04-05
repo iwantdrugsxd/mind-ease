@@ -61,6 +61,85 @@ class FirebaseAuthenticationTests(TestCase):
         self.assertEqual(user.id, existing_user.id)
         self.assertEqual(decoded.get("uid"), "uid-123")
 
+    @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
+    @patch("screening.firebase_auth.auth.verify_id_token")
+    def test_valid_token_reuses_existing_clinician_user_by_email(self, verify_mock, _init_mock):
+        existing_user = User.objects.create_user(
+            username="legacy_clinician_user",
+            email="clinician@example.com",
+            first_name="Legacy",
+            last_name="Clinician",
+        )
+        Clinician.objects.create(
+            user=existing_user,
+            license_number="LIC-EMAIL-LINK",
+            specialization="Psychiatry",
+            phone_number="9999999999",
+            status=Clinician.Status.APPROVED,
+        )
+        verify_mock.return_value = {
+            "uid": "firebase-clinician-uid",
+            "email": "clinician@example.com",
+            "name": "Legacy Clinician",
+        }
+
+        request = self.factory.get(
+            "/api/clinician/auth/status/",
+            HTTP_AUTHORIZATION="Bearer clinician-token",
+        )
+        request.user = AnonymousUser()
+
+        user, decoded = self.authenticator.authenticate(request)
+        self.assertEqual(user.id, existing_user.id)
+        self.assertEqual(decoded.get("uid"), "firebase-clinician-uid")
+        self.assertEqual(User.objects.filter(email="clinician@example.com").count(), 1)
+
+    @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
+    @patch("screening.firebase_auth.auth.verify_id_token")
+    def test_valid_token_creates_new_user_when_email_does_not_match_existing_account(self, verify_mock, _init_mock):
+        verify_mock.return_value = {
+            "uid": "brand-new-uid",
+            "email": "brand-new@example.com",
+            "name": "Brand New",
+        }
+
+        request = self.factory.get(
+            "/api/screening/patients/",
+            HTTP_AUTHORIZATION="Bearer brand-new-token",
+        )
+        request.user = AnonymousUser()
+
+        user, decoded = self.authenticator.authenticate(request)
+        self.assertEqual(decoded.get("uid"), "brand-new-uid")
+        self.assertEqual(user.username, "firebase_brand-new-uid")
+        self.assertEqual(user.email, "brand-new@example.com")
+
+    @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
+    @patch("screening.firebase_auth.auth.verify_id_token")
+    def test_valid_token_does_not_pick_arbitrary_clinician_when_email_is_ambiguous(self, verify_mock, _init_mock):
+        """Multiple clinician rows for the same email must not auto-link (unsafe)."""
+        u1 = User.objects.create_user(username="clin_a", email="dup@example.com")
+        u2 = User.objects.create_user(username="clin_b", email="dup@example.com")
+        for u in (u1, u2):
+            Clinician.objects.create(
+                user=u,
+                license_number=f"LIC-{u.id}",
+                specialization="Psychiatry",
+                phone_number="9999999999",
+                status=Clinician.Status.APPROVED,
+            )
+        verify_mock.return_value = {"uid": "new-firebase-uid", "email": "dup@example.com", "name": "Dup"}
+
+        request = self.factory.get(
+            "/api/clinician/auth/status/",
+            HTTP_AUTHORIZATION="Bearer tok",
+        )
+        request.user = AnonymousUser()
+
+        user, _decoded = self.authenticator.authenticate(request)
+        self.assertEqual(user.username, "firebase_new-firebase-uid")
+        self.assertNotIn(user.id, (u1.id, u2.id))
+
 
 class OnboardingSchemaCheckTests(TestCase):
     databases = {"default"}

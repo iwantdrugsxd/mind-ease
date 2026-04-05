@@ -75,23 +75,53 @@ def initialize_firebase_admin() -> bool:
 
 def resolve_user_from_firebase_uid(firebase_uid: str, decoded_token: Optional[Dict[str, Any]] = None) -> User:
     from .models import Patient
+    from clinician.models import Clinician
 
     patient = Patient.objects.select_related("user").filter(firebase_uid=firebase_uid).first()
     if patient:
         return patient.user
 
-    username = f"firebase_{firebase_uid}"
     email = ""
     first_name = "Firebase"
     last_name = "User"
     if decoded_token:
-        email = decoded_token.get("email") or ""
+        email = (decoded_token.get("email") or "").strip().lower()
         name = (decoded_token.get("name") or "").strip()
         if name:
             parts = name.split(" ", 1)
             first_name = parts[0]
             last_name = parts[1] if len(parts) > 1 else ""
 
+    # Production safety: clinician profiles may already exist on a legacy/backend-created
+    # Django user before the first Firebase-authenticated request for that UID arrives.
+    # If the verified token email maps to exactly one existing backend user, reuse it
+    # instead of silently creating a parallel account that loses the clinician profile link.
+    if email:
+        clinician_user_ids = list(
+            Clinician.objects.filter(user__email__iexact=email)
+            .values_list("user_id", flat=True)
+            .distinct()
+        )
+        if len(clinician_user_ids) == 1:
+            return User.objects.get(id=clinician_user_ids[0])
+        if len(clinician_user_ids) > 1:
+            logger.warning(
+                "Ambiguous Firebase email %r matches %d clinician user rows; skipping clinician email link.",
+                email,
+                len(clinician_user_ids),
+            )
+
+        matching_users = list(User.objects.filter(email__iexact=email).order_by("id"))
+        if len(matching_users) == 1:
+            return matching_users[0]
+        if len(matching_users) > 1:
+            logger.warning(
+                "Ambiguous Firebase email %r matches %d Django user rows; skipping generic email link.",
+                email,
+                len(matching_users),
+            )
+
+    username = f"firebase_{firebase_uid}"
     user, _ = User.objects.get_or_create(
         username=username,
         defaults={
