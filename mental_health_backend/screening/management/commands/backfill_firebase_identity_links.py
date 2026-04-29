@@ -1,10 +1,13 @@
 """
-Populate FirebaseIdentityLink from existing Patient rows and legacy firebase_<uid> Django users.
+Populate FirebaseIdentityLink from existing Patient rows and legacy clinician accounts.
 
 Safe to run multiple times (idempotent). Use --dry-run first in production.
 
-Does not call Firebase; uses only DB state. Clinicians without a Patient row are only
-backfilled when their username matches firebase_<uid> (legacy auto-created accounts).
+Does not call Firebase; uses only DB state.
+Priority:
+1) Patient.firebase_uid -> Patient.user
+2) Legacy User.username == firebase_<uid> for clinician users
+3) Explicit clinician email-to-uid mappings passed via --map email=uid
 """
 
 from typing import Optional
@@ -26,12 +29,24 @@ class Command(BaseCommand):
             action="store_true",
             help="Print actions without writing to the database.",
         )
+        parser.add_argument(
+            "--map",
+            action="append",
+            default=[],
+            metavar="EMAIL=FIREBASE_UID",
+            help=(
+                "Explicit clinician email-to-firebase-uid mapping. Repeatable. "
+                "Example: --map revant12@gmail.com=abc123uid"
+            ),
+        )
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
+        raw_mappings = options["map"] or []
         created = 0
         skipped_ok = 0
         conflicts = 0
+        malformed = 0
 
         def report(msg: str, level: Optional[str] = None):
             if level == "error":
@@ -40,6 +55,22 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(msg))
             else:
                 self.stdout.write(msg)
+
+        explicit_maps = []
+        for item in raw_mappings:
+            raw = (item or "").strip()
+            if "=" not in raw:
+                report(f"SKIP malformed mapping {raw!r}: expected EMAIL=FIREBASE_UID", "warning")
+                malformed += 1
+                continue
+            email, uid = raw.split("=", 1)
+            email = email.strip().lower()
+            uid = uid.strip()
+            if not email or not uid:
+                report(f"SKIP malformed mapping {raw!r}: expected non-empty EMAIL and FIREBASE_UID", "warning")
+                malformed += 1
+                continue
+            explicit_maps.append((email, uid))
 
         # --- 1) Patient rows (source of truth for UID <-> user) ---
         for patient in Patient.objects.select_related("user").iterator():
@@ -134,6 +165,58 @@ class Command(BaseCommand):
                 report(f"CREATED link (legacy username) uid={uid!r} -> user_id={user.id}")
                 created += 1
 
+        # --- 3) Explicit email->uid mappings for existing clinician accounts ---
+        for email, uid in explicit_maps:
+            clinicians = list(
+                Clinician.objects.select_related("user").filter(user__email__iexact=email).order_by("id")
+            )
+            if len(clinicians) != 1:
+                report(
+                    f"CONFLICT mapping email={email!r}: expected exactly 1 clinician account, found {len(clinicians)}",
+                    "error",
+                )
+                conflicts += 1
+                continue
+
+            user = clinicians[0].user
+            existing_by_uid = FirebaseIdentityLink.objects.filter(firebase_uid=uid).first()
+            existing_by_user = FirebaseIdentityLink.objects.filter(user=user).first()
+
+            if existing_by_uid and existing_by_uid.user_id != user.id:
+                report(
+                    f"CONFLICT mapping uid={uid!r}: already linked to user_id={existing_by_uid.user_id}, "
+                    f"cannot link clinician user_id={user.id}",
+                    "error",
+                )
+                conflicts += 1
+                continue
+
+            if existing_by_user and existing_by_user.firebase_uid != uid:
+                report(
+                    f"CONFLICT mapping user_id={user.id}: already linked to firebase_uid={existing_by_user.firebase_uid!r}, "
+                    f"cannot relink to {uid!r}",
+                    "error",
+                )
+                conflicts += 1
+                continue
+
+            if existing_by_uid or existing_by_user:
+                skipped_ok += 1
+                continue
+
+            if dry_run:
+                report(f"DRY-RUN would create link (explicit map) uid={uid!r} -> user_id={user.id} email={email}")
+                created += 1
+            else:
+                with transaction.atomic():
+                    FirebaseIdentityLink.objects.create(
+                        user=user,
+                        firebase_uid=uid,
+                        email=email,
+                    )
+                report(f"CREATED link (explicit map) uid={uid!r} -> user_id={user.id} email={email}")
+                created += 1
+
         report(
-            f"Done. created={created} skipped_already_ok≈{skipped_ok} conflicts={conflicts} dry_run={dry_run}"
+            f"Done. created={created} skipped_already_ok≈{skipped_ok} conflicts={conflicts} malformed={malformed} dry_run={dry_run}"
         )

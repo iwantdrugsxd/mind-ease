@@ -194,10 +194,11 @@ class AppointmentSerializer(serializers.ModelSerializer):
         model = Appointment
         fields = ['id', 'patient', 'patient_name', 'clinician', 'clinician_name',
                  'appointment_type', 'scheduled_date', 'duration_minutes', 'status',
+                 'patient_response', 'patient_responded_at',
                  'fhir_appointment_id', 'fhir_patient_id', 'fhir_practitioner_id',
                  'reason', 'clinician_notes', 'patient_notes', 'consultation_case', 'created_at',
                  'updated_at', 'completed_at']
-        read_only_fields = ['id', 'clinician', 'patient_name', 'clinician_name', 'created_at', 'updated_at', 'completed_at']
+        read_only_fields = ['id', 'clinician', 'patient_name', 'clinician_name', 'patient_responded_at', 'created_at', 'updated_at', 'completed_at']
 
 
 class TreatmentPlanSerializer(serializers.ModelSerializer):
@@ -295,6 +296,7 @@ class ConsultationMessageSerializer(serializers.ModelSerializer):
 
 class ConsultationThreadSerializer(serializers.ModelSerializer):
     messages = ConsultationMessageSerializer(many=True, read_only=True)
+    pending_patient_appointment = serializers.SerializerMethodField()
 
     class Meta:
         model = ConsultationThread
@@ -311,6 +313,7 @@ class ConsultationThreadSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
             'messages',
+            'pending_patient_appointment',
         ]
         read_only_fields = [
             'id',
@@ -325,15 +328,37 @@ class ConsultationThreadSerializer(serializers.ModelSerializer):
             'updated_at',
         ]
 
+    def get_pending_patient_appointment(self, obj):
+        appointment = Appointment.objects.filter(
+            consultation_case=obj.consultation_case,
+            patient=obj.patient,
+            clinician=obj.clinician,
+            status="scheduled",
+            patient_response=Appointment.PatientResponse.PENDING,
+        ).order_by("scheduled_date").first()
+        if not appointment:
+            return None
+        return {
+            "id": appointment.id,
+            "appointment_type": appointment.appointment_type,
+            "scheduled_date": appointment.scheduled_date,
+            "duration_minutes": appointment.duration_minutes,
+            "status": appointment.status,
+            "patient_response": appointment.patient_response,
+            "reason": appointment.reason,
+        }
+
 
 class CareNotificationSerializer(serializers.ModelSerializer):
     consultation_case_id = serializers.IntegerField(source="consultation_case.id", read_only=True)
+    related_appointment_id = serializers.IntegerField(source="related_appointment.id", read_only=True)
 
     class Meta:
         model = CareNotification
         fields = [
             "id",
             "consultation_case_id",
+            "related_appointment_id",
             "notification_type",
             "channel",
             "title",
@@ -440,9 +465,16 @@ class ConsultationCaseListSerializer(serializers.ModelSerializer):
         ]
 
     def get_patient_summary(self, obj):
+        summary_map = self.context.get("patient_summary_map") or {}
+        cached = summary_map.get(obj.patient_id)
+        if cached is not None:
+            return cached
         return build_clinician_patient_summary(obj.patient)
 
     def _get_next_appointment(self, obj):
+        prefetched = getattr(obj, "_prefetched_active_appointments", None)
+        if prefetched is not None:
+            return prefetched[0] if prefetched else None
         try:
             return obj.appointments.filter(status__in=['scheduled', 'confirmed', 'in_progress']).order_by('scheduled_date').first()
         except Exception:
@@ -457,6 +489,9 @@ class ConsultationCaseListSerializer(serializers.ModelSerializer):
         return appt.status if appt else None
 
     def get_notification_count(self, obj):
+        prefetched = getattr(obj, "_prefetched_in_app_notifications", None)
+        if prefetched is not None:
+            return len(prefetched)
         try:
             return obj.notifications.filter(channel=CareNotification.Channel.IN_APP, recipient_role=CareNotification.RecipientRole.PATIENT).count()
         except Exception:
@@ -547,21 +582,34 @@ class ConsultationCaseDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_patient_summary(self, obj):
+        summary_map = self.context.get("patient_summary_map") or {}
+        cached = summary_map.get(obj.patient_id)
+        if cached is not None:
+            return cached
         return build_clinician_patient_summary(obj.patient)
 
     def get_appointment_count(self, obj):
+        prefetched = getattr(obj, "_prefetched_all_appointments", None)
+        if prefetched is not None:
+            return len(prefetched)
         try:
             return obj.appointments.count()
         except Exception:
             return 0
 
     def get_note_count(self, obj):
+        prefetched = getattr(obj, "_prefetched_notes", None)
+        if prefetched is not None:
+            return len(prefetched)
         try:
             return obj.notes.count()
         except Exception:
             return 0
 
     def get_most_recent_appointment(self, obj):
+        prefetched = getattr(obj, "_prefetched_all_appointments", None)
+        if prefetched is not None:
+            return prefetched[0].scheduled_date if prefetched else None
         try:
             appt = obj.appointments.order_by('-scheduled_date').first()
             return appt.scheduled_date if appt else None
@@ -569,6 +617,9 @@ class ConsultationCaseDetailSerializer(serializers.ModelSerializer):
             return None
 
     def get_next_appointment_at(self, obj):
+        prefetched = getattr(obj, "_prefetched_active_appointments", None)
+        if prefetched is not None:
+            return prefetched[0].scheduled_date if prefetched else None
         try:
             appt = obj.appointments.filter(status__in=['scheduled', 'confirmed', 'in_progress']).order_by('scheduled_date').first()
             return appt.scheduled_date if appt else None
@@ -576,6 +627,9 @@ class ConsultationCaseDetailSerializer(serializers.ModelSerializer):
             return None
 
     def get_next_appointment_status(self, obj):
+        prefetched = getattr(obj, "_prefetched_active_appointments", None)
+        if prefetched is not None:
+            return prefetched[0].status if prefetched else None
         try:
             appt = obj.appointments.filter(status__in=['scheduled', 'confirmed', 'in_progress']).order_by('scheduled_date').first()
             return appt.status if appt else None
@@ -583,6 +637,9 @@ class ConsultationCaseDetailSerializer(serializers.ModelSerializer):
             return None
 
     def get_most_recent_note_at(self, obj):
+        prefetched = getattr(obj, "_prefetched_notes", None)
+        if prefetched is not None:
+            return prefetched[0].created_at if prefetched else None
         try:
             note = obj.notes.order_by("-created_at").first()
             return note.created_at if note else None
@@ -590,12 +647,18 @@ class ConsultationCaseDetailSerializer(serializers.ModelSerializer):
             return None
 
     def get_notification_count(self, obj):
+        prefetched = getattr(obj, "_prefetched_in_app_notifications", None)
+        if prefetched is not None:
+            return len(prefetched)
         try:
             return obj.notifications.filter(channel=CareNotification.Channel.IN_APP, recipient_role=CareNotification.RecipientRole.PATIENT).count()
         except Exception:
             return 0
 
     def get_unread_notification_count(self, obj):
+        prefetched = getattr(obj, "_prefetched_in_app_notifications", None)
+        if prefetched is not None:
+            return sum(1 for notification in prefetched if not notification.is_read)
         try:
             return obj.notifications.filter(
                 channel=CareNotification.Channel.IN_APP,
@@ -606,6 +669,9 @@ class ConsultationCaseDetailSerializer(serializers.ModelSerializer):
             return 0
 
     def get_most_recent_notification_at(self, obj):
+        prefetched = getattr(obj, "_prefetched_in_app_notifications", None)
+        if prefetched is not None:
+            return prefetched[0].created_at if prefetched else None
         try:
             notif = obj.notifications.filter(
                 channel=CareNotification.Channel.IN_APP,
@@ -616,6 +682,9 @@ class ConsultationCaseDetailSerializer(serializers.ModelSerializer):
             return None
 
     def get_latest_outbound_delivery_status(self, obj):
+        prefetched = getattr(obj, "_prefetched_outbound_notifications", None)
+        if prefetched is not None:
+            return prefetched[0].status if prefetched else None
         try:
             notif = obj.notifications.exclude(channel=CareNotification.Channel.IN_APP).order_by("-created_at").first()
             return notif.status if notif else None

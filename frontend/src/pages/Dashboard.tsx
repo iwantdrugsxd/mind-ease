@@ -8,7 +8,6 @@ import {
   ArrowRight,
   Shield,
   HeartHandshake,
-  SmilePlus,
 } from 'lucide-react';
 import api from '../utils/api';
 import { fetchPatientCareTeamSummary } from '../utils/clinicianApi';
@@ -190,10 +189,50 @@ const Dashboard: React.FC = () => {
     latestNotificationTitle: '',
   });
   const [loading, setLoading] = useState(true);
-  const [selectedMood, setSelectedMood] = useState<number | null>(null);
-  const [moodNotes, setMoodNotes] = useState('');
-  const [moodSaving, setMoodSaving] = useState(false);
-  const [moodFeedback, setMoodFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem('patient:dashboard:view');
+      if (!raw) {
+        setHydrated(true);
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        stats?: DashboardStats;
+        patientCard?: PatientCard | null;
+        orchestration?: OrchestrationState | null;
+        careTeamSummary?: {
+          activeCount: number;
+          unreadCount: number;
+          replyRequestedCount: number;
+          scheduledFollowups: number;
+          unreadNotifications: number;
+          latestNotificationTitle: string;
+        };
+      };
+      if (parsed.stats) setStats(parsed.stats);
+      if (parsed.patientCard) setPatientCard(parsed.patientCard);
+      if (parsed.orchestration) setOrchestration(parsed.orchestration);
+      if (parsed.careTeamSummary) setCareTeamSummary(parsed.careTeamSummary);
+    } catch {
+      // Ignore hydration failures.
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.sessionStorage.setItem(
+        'patient:dashboard:view',
+        JSON.stringify({ stats, patientCard, orchestration, careTeamSummary })
+      );
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [hydrated, stats, patientCard, orchestration, careTeamSummary]);
 
   const refreshCareTeamSummary = useCallback(async () => {
     try {
@@ -228,7 +267,9 @@ const Dashboard: React.FC = () => {
   });
 
   const loadDashboardData = useCallback(async () => {
+    const isInitial = !orchestration && !patientCard;
     try {
+      if (isInitial) setLoading(true);
       let stateData: OrchestrationState | null = null;
       try {
         const stateRes = await api.get<OrchestrationState>('/screening/onboarding/state/');
@@ -248,7 +289,9 @@ const Dashboard: React.FC = () => {
           });
         }
       } catch {
-        setOrchestration(null);
+        if (!orchestration) {
+          setOrchestration(null);
+        }
       }
       await refreshCareTeamSummary();
       const ds = (stateData as any)?.dashboard_stats;
@@ -267,7 +310,7 @@ const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [refreshCareTeamSummary]);
+  }, [refreshCareTeamSummary, orchestration, patientCard]);
 
   useEffect(() => {
     void loadDashboardData();
@@ -284,7 +327,18 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  if (loading) {
+  if (loading && !hydrated && !orchestration && !patientCard) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-900 mx-auto" />
+          <p className="mt-4 text-slate-600">Loading your dashboard…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !orchestration && !patientCard) {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
         <div className="text-center">
@@ -322,44 +376,7 @@ const Dashboard: React.FC = () => {
       ? `${careAttention} item${careAttention === 1 ? '' : 's'} need attention`
       : 'No pending outreach';
   const recentTimeline = orchestration?.recent_activity || [];
-  const currentMoodLabel =
-    orchestration?.mood_trend?.recent_avg_mood != null
-      ? `${orchestration.mood_trend.recent_avg_mood.toFixed(1)}/5 recent average`
-      : 'No mood check saved recently';
   const topLifestyleSignal = orchestration?.lifestyle_insights?.top_signal;
-
-  const submitMoodCheck = async () => {
-    if (selectedMood == null) {
-      setMoodFeedback({ tone: 'error', message: 'Choose how you are feeling before saving today’s check-in.' });
-      return;
-    }
-    setMoodSaving(true);
-    setMoodFeedback(null);
-    try {
-      await api.post('/selfcare/mood-entries/', {
-        mood_level: selectedMood,
-        notes: moodNotes,
-        energy_level: 3,
-        sleep_quality: 3,
-        stress_level: selectedMood <= 2 ? 4 : selectedMood >= 4 ? 2 : 3,
-      });
-      setMoodFeedback({ tone: 'success', message: 'Mood check saved. Your recommendations and continuity signals are updating.' });
-      setMoodNotes('');
-      setSelectedMood(null);
-      await loadDashboardData();
-    } catch (error: any) {
-      setMoodFeedback({
-        tone: 'error',
-        message:
-          error?.response?.data?.error ||
-          error?.response?.data?.detail ||
-          error?.message ||
-          'Could not save your mood check right now.',
-      });
-    } finally {
-      setMoodSaving(false);
-    }
-  };
 
   return (
     <div className="space-y-5 lg:space-y-7">
@@ -586,66 +603,6 @@ const Dashboard: React.FC = () => {
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-
-          <div className={panel}>
-            <div className="px-5 py-4 border-b border-slate-100">
-              <p className={sectionLabel}>Check-in</p>
-              <h3 className="mt-1 text-xl font-bold text-slate-950">Mood check</h3>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <p className="text-sm font-semibold text-slate-900">{currentMoodLabel}</p>
-              </div>
-              <div className="grid grid-cols-5 gap-2">
-                {[
-                  { value: 1, label: 'Very low', emoji: '😟' },
-                  { value: 2, label: 'Low', emoji: '😕' },
-                  { value: 3, label: 'Okay', emoji: '😐' },
-                  { value: 4, label: 'Good', emoji: '🙂' },
-                  { value: 5, label: 'Strong', emoji: '😊' },
-                ].map((mood) => (
-                  <button
-                    key={mood.value}
-                    onClick={() => setSelectedMood(mood.value)}
-                    className={`rounded-2xl border px-2 py-3 text-center transition ${
-                      selectedMood === mood.value
-                        ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-slate-200 bg-white text-slate-800 hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="text-xl">{mood.emoji}</div>
-                    <div className="mt-2 text-[11px] font-semibold">{mood.label}</div>
-                  </button>
-                ))}
-              </div>
-              <textarea
-                value={moodNotes}
-                onChange={(e) => setMoodNotes(e.target.value)}
-                rows={3}
-                placeholder="Optional note about today…"
-                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-400"
-              />
-              {moodFeedback ? (
-                <div
-                  className={`rounded-2xl border px-4 py-3 text-sm ${
-                    moodFeedback.tone === 'success'
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-                      : 'border-rose-200 bg-rose-50 text-rose-900'
-                  }`}
-                >
-                  {moodFeedback.message}
-                </div>
-              ) : null}
-              <button
-                onClick={() => void submitMoodCheck()}
-                disabled={moodSaving}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-px hover:bg-slate-900 disabled:opacity-60"
-              >
-                <SmilePlus className="h-4 w-4" />
-                {moodSaving ? 'Saving…' : 'Save mood check'}
-              </button>
             </div>
           </div>
 

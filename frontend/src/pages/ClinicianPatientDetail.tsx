@@ -722,8 +722,9 @@ const ClinicianPatientDetail: React.FC = () => {
                         onChange={(e) => setAppt({ ...appt, type: e.target.value })}
                       >
                         <option value="follow_up">Follow-up</option>
-                        <option value="consultation">Consultation</option>
-                        <option value="check_in">Check-in</option>
+                        <option value="initial">Initial consultation</option>
+                        <option value="teleconsult">Teleconsultation</option>
+                        <option value="crisis">Crisis intervention</option>
                       </select>
                     </label>
                     <label className="block">

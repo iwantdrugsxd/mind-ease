@@ -4,7 +4,7 @@ from .models import Clinician
 
 
 class IsApprovedClinician(BasePermission):
-    """User must have a clinician profile that is not rejected (pending and approved may access)."""
+    """User must have a clinician profile. Status gating is disabled in the current simplified flow."""
 
     message = "Active clinician account required."
 
@@ -12,4 +12,4 @@ class IsApprovedClinician(BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         c = Clinician.objects.filter(user=request.user).first()
-        return bool(c and c.status != Clinician.Status.REJECTED)
+        return bool(c)

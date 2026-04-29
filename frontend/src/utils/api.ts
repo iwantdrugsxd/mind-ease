@@ -78,13 +78,20 @@ export async function getApiAuthToken(): Promise<string | null> {
   let token: string | null = null;
   try {
     const auth = getAuth();
+    if (typeof (auth as any).authStateReady === 'function') {
+      await (auth as any).authStateReady();
+    }
     if (auth.currentUser) {
       token = await auth.currentUser.getIdToken();
+    } else {
+      // Do not reuse a stale token from localStorage when Firebase has already
+      // restored to "signed out" or has no current user for this tab yet.
+      localStorage.removeItem('authToken');
     }
   } catch {
     // fall through to localStorage
   }
-  if (!token) {
+  if (!token && localStorage.getItem('authToken')) {
     token = localStorage.getItem('authToken');
   }
   return token;

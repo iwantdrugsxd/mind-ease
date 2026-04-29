@@ -5,6 +5,7 @@ import {
   fetchPatientConsultationThread,
   sendPatientConsultationMessage,
   markPatientConsultationMessageRead,
+  respondToPatientAppointment,
 } from '../../utils/clinicianApi';
 import { emitConsultationRefresh } from '../../utils/consultationRefreshBus';
 
@@ -32,6 +33,7 @@ export default function CareTeamChatPanel({
   const [error, setError] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState('');
   const [sending, setSending] = React.useState(false);
+  const [responding, setResponding] = React.useState<'accepted' | 'rejected' | null>(null);
   const [lastSyncAt, setLastSyncAt] = React.useState<number | null>(null);
   const [newActivity, setNewActivity] = React.useState(false);
   const [highlightIds, setHighlightIds] = React.useState<Set<number>>(() => new Set());
@@ -141,6 +143,28 @@ export default function CareTeamChatPanel({
     }
   };
 
+  const onAppointmentResponse = async (response: 'accepted' | 'rejected') => {
+    const appointmentId = thread?.pending_patient_appointment?.id;
+    if (!appointmentId) return;
+    setResponding(response);
+    setError(null);
+    try {
+      await respondToPatientAppointment(appointmentId, response);
+      await load({ silent: true });
+      await bumpPatientBus();
+    } catch (e: any) {
+      setError(e?.message || 'Unable to update your appointment response.');
+    } finally {
+      setResponding(null);
+    }
+  };
+
+  const latestPendingAppointmentNoticeId = React.useMemo(() => {
+    if (!thread?.pending_patient_appointment) return null;
+    const appointmentNotices = thread.messages.filter((m) => m.message_type === 'appointment_notice');
+    return appointmentNotices.length ? appointmentNotices[appointmentNotices.length - 1].id : null;
+  }, [thread]);
+
   if (loading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -210,6 +234,37 @@ export default function CareTeamChatPanel({
                     : 'Update'}
               </div>
               <div className="whitespace-pre-wrap">{m.content}</div>
+              {thread.pending_patient_appointment && m.id === latestPendingAppointmentNoticeId ? (
+                <div className="mt-3 rounded-xl border border-emerald-200 bg-white/80 p-3 text-xs text-slate-700">
+                  <div className="font-semibold text-slate-900">
+                    Respond to this appointment request
+                  </div>
+                  <div className="mt-1">
+                    {new Date(thread.pending_patient_appointment.scheduled_date).toLocaleString()} · {thread.pending_patient_appointment.duration_minutes} min
+                  </div>
+                  {thread.pending_patient_appointment.reason ? (
+                    <div className="mt-1 text-slate-600">{thread.pending_patient_appointment.reason}</div>
+                  ) : null}
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => void onAppointmentResponse('accepted')}
+                      disabled={Boolean(responding)}
+                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60 hover:bg-emerald-700"
+                    >
+                      {responding === 'accepted' ? 'Accepting…' : 'Accept appointment'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onAppointmentResponse('rejected')}
+                      disabled={Boolean(responding)}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-60 hover:bg-slate-50"
+                    >
+                      {responding === 'rejected' ? 'Rejecting…' : 'Reject appointment'}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div className="mt-1 text-[10px] opacity-75">{new Date(m.created_at).toLocaleString()}</div>
             </div>
           ))

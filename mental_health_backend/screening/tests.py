@@ -1,7 +1,9 @@
 from unittest.mock import patch
 from datetime import timedelta
+from io import StringIO
 
 from django.contrib.auth.models import AnonymousUser, User
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
@@ -44,6 +46,46 @@ class FirebaseAuthenticationTests(TestCase):
         request.user = AnonymousUser()
         with self.assertRaises(AuthenticationFailed):
             self.authenticator.authenticate(request)
+
+
+class FirebaseIdentityBackfillCommandTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.authenticator = FirebaseAuthentication()
+
+    def test_backfill_creates_link_from_patient_row(self):
+        user = User.objects.create_user(username="patient_user", email="patient@example.com")
+        Patient.objects.create(user=user, firebase_uid="uid-patient-cmd")
+
+        out = StringIO()
+        call_command("backfill_firebase_identity_links", stdout=out)
+
+        link = FirebaseIdentityLink.objects.get(firebase_uid="uid-patient-cmd")
+        self.assertEqual(link.user_id, user.id)
+        self.assertIn("created=1", out.getvalue().lower())
+
+    def test_backfill_creates_link_from_explicit_clinician_email_mapping(self):
+        user = User.objects.create_user(username="legacy_clinician", email="legacyclin@example.com")
+        Clinician.objects.create(
+            user=user,
+            license_number="LIC-BACKFILL-CMD",
+            specialization="Psychology",
+            phone_number="9876543210",
+            status=Clinician.Status.APPROVED,
+        )
+
+        out = StringIO()
+        call_command(
+            "backfill_firebase_identity_links",
+            "--map",
+            "legacyclin@example.com=firebase-uid-from-prod",
+            stdout=out,
+        )
+
+        link = FirebaseIdentityLink.objects.get(firebase_uid="firebase-uid-from-prod")
+        self.assertEqual(link.user_id, user.id)
+        self.assertEqual(link.email, "legacyclin@example.com")
+        self.assertIn("explicit map", out.getvalue().lower())
 
     @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
     @patch("screening.firebase_auth.auth.verify_id_token")
@@ -384,7 +426,7 @@ class EndpointTighteningTests(APITestCase):
     @patch("screening.firebase_auth.auth.verify_id_token", return_value={"uid": "uid-lock"})
     def test_patient_endpoint_requires_auth_and_create_works_without_raw_uid(self, *_mocks):
         unauth = self.client.get("/api/screening/patients/")
-        self.assertEqual(unauth.status_code, 403)
+        self.assertEqual(unauth.status_code, 401)
 
         self.client.credentials(HTTP_AUTHORIZATION="Bearer good-token")
         create = self.client.post("/api/screening/patients/", {})
@@ -395,7 +437,7 @@ class EndpointTighteningTests(APITestCase):
     @patch("screening.firebase_auth.auth.verify_id_token", return_value={"uid": "uid-lock"})
     def test_chatbot_endpoint_requires_auth_and_uses_authenticated_identity(self, *_mocks):
         unauth = self.client.post("/api/screening/chatbot/conversations/", {})
-        self.assertEqual(unauth.status_code, 403)
+        self.assertEqual(unauth.status_code, 401)
 
         self.client.credentials(HTTP_AUTHORIZATION="Bearer good-token")
         create = self.client.post("/api/screening/chatbot/conversations/", {})
@@ -736,7 +778,7 @@ class PatientScorecardTests(APITestCase):
 
     def test_scorecard_me_requires_auth(self):
         res = self.client.get("/api/screening/scorecard/me/")
-        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.status_code, 401)
 
     @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
     @patch("screening.firebase_auth.auth.verify_id_token", return_value={"uid": "uid-without-patient"})

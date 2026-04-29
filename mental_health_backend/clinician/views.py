@@ -10,7 +10,7 @@ from rest_framework.permissions import BasePermission, IsAuthenticated
 from rest_framework.renderers import BaseRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.db.models import Exists, OuterRef
+from django.db.models import Count, Exists, OuterRef, Prefetch
 from django.utils import timezone
 from django.utils.formats import date_format
 
@@ -37,7 +37,8 @@ from .serializers import (
     CareOrchestrationPolicySerializer,
 )
 from screening.scorecard_service import build_clinician_patient_summary
-from screening.models import Patient
+from screening.models import Patient, ScreeningAlert
+from screening.onboarding_service import build_user_state_summary
 from .consultation_service import (
     _ensure_thread_for_case,
     backfill_high_risk_patients_to_all_clinicians,
@@ -46,6 +47,43 @@ from .consultation_service import (
 from .notification_service import send_patient_care_notification
 from .orchestration_service import evaluate_case_orchestration, get_active_policy
 from .notification_service import retry_failed_notification
+
+
+def _patient_reassessment_notification_state(patient: Optional[Patient]) -> None:
+    if not patient:
+        return
+    try:
+        state = build_user_state_summary(patient, readonly=True)
+    except Exception:
+        return
+    reassessment = state.get("reassessment") or {}
+    if not reassessment.get("reassessment_due"):
+        return
+    latest_assessment_at = (state.get("latest_assessment") or {}).get("created_at")
+    existing = CareNotification.objects.filter(
+        patient=patient,
+        recipient_role=CareNotification.RecipientRole.PATIENT,
+        channel=CareNotification.Channel.IN_APP,
+        notification_type=CareNotification.NotificationType.REASSESSMENT_DUE,
+    )
+    if latest_assessment_at:
+        existing = existing.filter(created_at__gte=latest_assessment_at)
+    if existing.exists():
+        return
+    case = ConsultationCase.objects.filter(patient=patient).exclude(status__in=["resolved", "closed"]).order_by("-last_activity_at").first()
+    recommended_type = reassessment.get("recommended_reassessment_type") or "screening"
+    CareNotification.objects.create(
+        patient=patient,
+        clinician=getattr(case, "assigned_clinician", None),
+        consultation_case=case,
+        notification_type=CareNotification.NotificationType.REASSESSMENT_DUE,
+        channel=CareNotification.Channel.IN_APP,
+        recipient_role=CareNotification.RecipientRole.PATIENT,
+        title="Time for your reassessment",
+        body=f"It has been two weeks since your last assessment. Please complete your {recommended_type.replace('_', ' ')} reassessment to keep your care plan current.",
+        status=CareNotification.DeliveryStatus.SENT,
+        delivered_at=timezone.now(),
+    )
 
 
 class ServerSentEventRenderer(BaseRenderer):
@@ -101,7 +139,7 @@ def _build_clinician_consultation_summary_payload(clinician: Clinician) -> dict:
     qs = ConsultationCase.objects.filter(assigned_clinician=clinician)
     total_open = qs.exclude(status__in=["resolved", "closed"]).count()
     awaiting_patient = qs.filter(status="awaiting_patient").count()
-    scheduled = qs.filter(status="scheduled").count()
+    scheduled = qs.filter(status__in=["scheduled", "awaiting_patient"]).count()
     urgent = qs.filter(priority__in=["high", "urgent"]).exclude(status__in=["resolved", "closed"]).count()
     unread = ConsultationThread.objects.filter(consultation_case__in=qs, clinician_unread_count__gt=0).count()
     high_priority = qs.filter(priority__in=["high", "urgent"]).count()
@@ -141,10 +179,11 @@ def _build_patient_care_team_summary_payload(patient: Optional[Patient]) -> dict
             "latest_case_activity_at": None,
             "latest_thread_message_at": None,
         }
+    _patient_reassessment_notification_state(patient)
     cases = ConsultationCase.objects.filter(patient=patient)
     active = cases.exclude(status__in=["closed"]).count()
     reply_requested = cases.filter(status="awaiting_patient").count()
-    scheduled = cases.filter(status="scheduled").count()
+    scheduled = cases.filter(status__in=["scheduled", "awaiting_patient"]).count()
     unresolved = cases.exclude(status__in=["resolved", "closed"]).count()
     unread = ConsultationThread.objects.filter(consultation_case__in=cases, patient_unread_count__gt=0).count()
     try:
@@ -209,6 +248,43 @@ def _build_thread_event_payload(case: ConsultationCase) -> dict:
         "clinician_unread_count": thread.clinician_unread_count,
         "patient_unread_count": thread.patient_unread_count,
     }
+
+
+def _consultation_case_queryset_for_clinician(clinician: Clinician):
+    return ConsultationCase.objects.filter(assigned_clinician=clinician).select_related(
+        "patient__user",
+        "assigned_clinician__user",
+        "thread",
+    ).prefetch_related(
+        Prefetch(
+            "appointments",
+            queryset=Appointment.objects.order_by("-scheduled_date"),
+            to_attr="_prefetched_all_appointments",
+        ),
+        Prefetch(
+            "appointments",
+            queryset=Appointment.objects.filter(status__in=["scheduled", "confirmed", "in_progress"]).order_by("scheduled_date"),
+            to_attr="_prefetched_active_appointments",
+        ),
+        Prefetch(
+            "notes",
+            queryset=ClinicalNote.objects.order_by("-created_at"),
+            to_attr="_prefetched_notes",
+        ),
+        Prefetch(
+            "notifications",
+            queryset=CareNotification.objects.filter(
+                channel=CareNotification.Channel.IN_APP,
+                recipient_role=CareNotification.RecipientRole.PATIENT,
+            ).order_by("-created_at"),
+            to_attr="_prefetched_in_app_notifications",
+        ),
+        Prefetch(
+            "notifications",
+            queryset=CareNotification.objects.exclude(channel=CareNotification.Channel.IN_APP).order_by("-created_at"),
+            to_attr="_prefetched_outbound_notifications",
+        ),
+    )
 
 
 class ClinicianRegistrationView(APIView):
@@ -277,8 +353,7 @@ class ClinicianAuthStatusView(APIView):
             {
                 "has_clinician_profile": True,
                 "status": clinician.status,
-                # True for pending + approved so clients route to the console; only rejected is blocked.
-                "is_approved": clinician.status != Clinician.Status.REJECTED,
+                "is_approved": True,
             }
         )
 
@@ -288,11 +363,6 @@ class ClinicianAuthProfileView(APIView):
 
     def patch(self, request):
         clinician = require_clinician(request.user)
-        if clinician.status == Clinician.Status.REJECTED:
-            return Response(
-                {"detail": "Profile cannot be updated after rejection."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
         ser = ClinicianProfileUpdateSerializer(clinician, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
@@ -324,7 +394,16 @@ class ClinicianViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"], url_path="patient-summaries")
     def patient_summaries(self, request):
         clinician = require_approved_clinician(request.user)
-        assignments = PatientAssignment.objects.filter(clinician=clinician, is_active=True).select_related("patient")
+        assignments = PatientAssignment.objects.filter(clinician=clinician, is_active=True).select_related("patient", "patient__user")
+        patient_ids = [assignment.patient_id for assignment in assignments]
+        unresolved_alerts = {
+            row["patient_id"]: row["count"]
+            for row in ScreeningAlert.objects.filter(patient_id__in=patient_ids, is_resolved=False)
+            .values("patient_id")
+            .annotate(count=Count("id"))
+        } if patient_ids else {}
+        for assignment in assignments:
+            setattr(assignment.patient, "_unresolved_alert_count", unresolved_alerts.get(assignment.patient_id, 0))
         payload = [build_clinician_patient_summary(assignment.patient) for assignment in assignments]
         return Response({"results": payload})
 
@@ -340,7 +419,7 @@ class ConsultationCaseViewSet(viewsets.ReadOnlyModelViewSet):
             return ConsultationCase.objects.none()
         for assignment in PatientAssignment.objects.filter(clinician=clinician, is_active=True).select_related("patient"):
             ensure_consultation_case_for_assignment(clinician, assignment.patient)
-        qs = ConsultationCase.objects.filter(assigned_clinician=clinician)
+        qs = _consultation_case_queryset_for_clinician(clinician)
         status_param = self.request.query_params.get("status")
         prio_param = self.request.query_params.get("priority")
         patient_param = self.request.query_params.get("patient")
@@ -354,10 +433,40 @@ class ConsultationCaseViewSet(viewsets.ReadOnlyModelViewSet):
             evaluate_case_orchestration(case)
         return qs.order_by("-last_activity_at")
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        patient_summary_map = {}
+        queryset = getattr(self, "_prefetched_objects_cache", None)
+        if queryset is None:
+            try:
+                queryset = list(self.filter_queryset(self.get_queryset()))
+            except Exception:
+                queryset = []
+        patient_ids = {case.patient_id for case in queryset}
+        if patient_ids:
+            unresolved_alerts = {
+                row["patient_id"]: row["count"]
+                for row in ScreeningAlert.objects.filter(patient_id__in=patient_ids, is_resolved=False)
+                .values("patient_id")
+                .annotate(count=Count("id"))
+            }
+            for case in queryset:
+                setattr(case.patient, "_unresolved_alert_count", unresolved_alerts.get(case.patient_id, 0))
+                patient_summary_map[case.patient_id] = build_clinician_patient_summary(case.patient)
+        context["patient_summary_map"] = patient_summary_map
+        return context
+
+    def list(self, request, *args, **kwargs):
+        queryset = list(self.filter_queryset(self.get_queryset()))
+        setattr(self, "_prefetched_objects_cache", queryset)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
     def retrieve(self, request, *args, **kwargs):
         obj = self.get_object()
         require_consultation_case_for_clinician(request.user, obj)
-        data = ConsultationCaseDetailSerializer(obj).data
+        setattr(self, "_prefetched_objects_cache", [obj])
+        data = ConsultationCaseDetailSerializer(obj, context=self.get_serializer_context()).data
         return Response(data)
 
     @action(detail=False, methods=["post"], url_path="derive")
@@ -492,6 +601,7 @@ class PatientConsultationThreadView(APIView):
             case = ConsultationCase.objects.get(id=case_id, patient=patient)
         except ConsultationCase.DoesNotExist:
             return Response({"detail": "Case not found"}, status=status.HTTP_404_NOT_FOUND)
+        _patient_reassessment_notification_state(patient)
         thread = getattr(case, "thread", None)
         if not thread:
             return Response({"detail": "No thread for this case"}, status=status.HTTP_400_BAD_REQUEST)
@@ -546,7 +656,18 @@ class PatientConsultationCaseListView(APIView):
         _user, patient, _uid = resolve_identity(request, allow_legacy_firebase_uid=False)
         if not patient:
             return Response({"results": []})
-        cases = ConsultationCase.objects.filter(patient=patient).order_by("-last_activity_at")
+        _patient_reassessment_notification_state(patient)
+        cases = ConsultationCase.objects.filter(patient=patient).select_related(
+            "patient__user",
+            "assigned_clinician__user",
+            "thread",
+        ).prefetch_related(
+            Prefetch(
+                "appointments",
+                queryset=Appointment.objects.filter(status__in=["scheduled", "confirmed", "in_progress"]).order_by("scheduled_date"),
+                to_attr="_prefetched_active_appointments",
+            )
+        ).order_by("-last_activity_at")
         for case in cases:
             evaluate_case_orchestration(case)
         data = PatientConsultationCaseListSerializer(cases, many=True).data
@@ -561,6 +682,7 @@ class PatientCareNotificationListView(APIView):
         _user, patient, _uid = resolve_identity(request, allow_legacy_firebase_uid=False)
         if not patient:
             return Response({"results": []})
+        _patient_reassessment_notification_state(patient)
         qs = CareNotification.objects.filter(
             patient=patient,
             recipient_role=CareNotification.RecipientRole.PATIENT,
@@ -812,7 +934,7 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         # If linked to a consultation case, update status to scheduled
         case = getattr(appt, "consultation_case", None)
         if case and case.assigned_clinician_id == c.id:
-            case.status = "scheduled"
+            case.status = "awaiting_patient"
             case.requires_follow_up = True
             case.resolved_at = None
             case.last_activity_at = timezone.now()
@@ -820,8 +942,8 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             thread = _ensure_thread_for_case(case)
             when = date_format(appt.scheduled_date, "SHORT_DATETIME_FORMAT")
             body = (
-                f"A follow-up consultation has been scheduled for {when}. "
-                "Your care team will share any details you need."
+                f"Your care team proposed a follow-up consultation for {when}. "
+                "Please accept or reject it in this chat."
             )
             sys_msg = ConsultationMessage.objects.create(
                 thread=thread,
@@ -840,16 +962,81 @@ class AppointmentViewSet(viewsets.ModelViewSet):
             evaluate_case_orchestration(case)
             send_patient_care_notification(
                 case=case,
-                notification_type=CareNotification.NotificationType.FOLLOW_UP_SCHEDULED,
-                title="A follow-up has been scheduled",
-                body=f"Your care team scheduled a follow-up for {when}. Open Care Team for the latest details.",
+                notification_type=CareNotification.NotificationType.APPOINTMENT_RESPONSE_REQUIRED,
+                title="Appointment response needed",
+                body=f"Your care team proposed a follow-up for {when}. Open Care Team to accept or reject it.",
                 related_appointment=appt,
                 send_email_delivery=True,
                 send_sms_delivery=case.priority == "urgent" or appt.appointment_type == "crisis",
-                email_subject="MindEase follow-up scheduled",
-                email_body=f"Your MindEase care team scheduled a follow-up for {when}. Sign in to Care Team to review the details.",
-                sms_body=f"MindEase: A follow-up has been scheduled for {when}. Open the app to review the details.",
+                email_subject="MindEase appointment response needed",
+                email_body=f"Your MindEase care team proposed a follow-up for {when}. Sign in to Care Team to accept or reject it.",
+                sms_body=f"MindEase: A follow-up was proposed for {when}. Open the app to accept or reject it.",
             )
+
+
+class PatientAppointmentResponseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, appointment_id=None):
+        from screening.identity import resolve_identity
+        _user, patient, _uid = resolve_identity(request, allow_legacy_firebase_uid=False)
+        if not patient:
+            return Response({"detail": "Patient identity not found"}, status=status.HTTP_400_BAD_REQUEST)
+        response_value = (request.data.get("response") or "").strip().lower()
+        if response_value not in {
+            Appointment.PatientResponse.ACCEPTED,
+            Appointment.PatientResponse.REJECTED,
+        }:
+            return Response({"detail": "Invalid response."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            appointment = Appointment.objects.select_related("consultation_case", "clinician__user", "patient__user").get(
+                id=appointment_id,
+                patient=patient,
+            )
+        except Appointment.DoesNotExist:
+            return Response({"detail": "Appointment not found."}, status=status.HTTP_404_NOT_FOUND)
+        if appointment.patient_response != Appointment.PatientResponse.PENDING:
+            return Response({"detail": "This appointment has already been answered."}, status=status.HTTP_400_BAD_REQUEST)
+        if appointment.status not in {"scheduled", "confirmed"}:
+            return Response({"detail": "This appointment can no longer be updated."}, status=status.HTTP_400_BAD_REQUEST)
+
+        case = getattr(appointment, "consultation_case", None)
+        thread = _ensure_thread_for_case(case) if case else None
+        when = date_format(appointment.scheduled_date, "SHORT_DATETIME_FORMAT")
+        appointment.patient_response = response_value
+        appointment.patient_responded_at = timezone.now()
+        if response_value == Appointment.PatientResponse.ACCEPTED:
+            appointment.status = "confirmed"
+            system_body = f"The patient accepted the appointment scheduled for {when}."
+            if case:
+                case.status = "scheduled"
+        else:
+            appointment.status = "cancelled"
+            system_body = f"The patient rejected the appointment scheduled for {when}. Please propose another time if needed."
+            if case:
+                case.status = "awaiting_clinician"
+        appointment.save(update_fields=["patient_response", "patient_responded_at", "status", "updated_at"])
+
+        if case:
+            case.requires_follow_up = True
+            case.resolved_at = None
+            case.last_activity_at = timezone.now()
+            case.save(update_fields=["status", "requires_follow_up", "resolved_at", "last_activity_at"])
+        if thread:
+            sys_msg = ConsultationMessage.objects.create(
+                thread=thread,
+                sender_user=None,
+                sender_type="system",
+                content=system_body,
+                message_type="system_notice",
+            )
+            thread.last_message_at = sys_msg.created_at
+            thread.last_message_preview = system_body[:280]
+            thread.clinician_unread_count = (thread.clinician_unread_count or 0) + 1
+            thread.save(update_fields=["last_message_at", "last_message_preview", "clinician_unread_count"])
+        if case:
+            evaluate_case_orchestration(case)
+        return Response(AppointmentSerializer(appointment, context={"request": request}).data)
 
 
 class TreatmentPlanViewSet(viewsets.ModelViewSet):

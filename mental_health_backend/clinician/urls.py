@@ -14,6 +14,7 @@ from .views import (
     ConsultationCaseViewSet,
     PatientConsultationThreadView,
     PatientConsultationCaseListView,
+    PatientAppointmentResponseView,
     PatientConsultationMessageReadView,
     PatientConsultationThreadEventsView,
     PatientCareNotificationListView,
@@ -58,6 +59,7 @@ urlpatterns = [
     # Patient-side endpoints
     path('patient/me/consultations/', PatientConsultationCaseListView.as_view(), name='patient-consultations'),
     path('patient/me/consultations/thread/', PatientConsultationThreadView.as_view(), name='patient-consultation-thread'),
+    path('patient/me/appointments/<int:appointment_id>/respond/', PatientAppointmentResponseView.as_view(), name='patient-appointment-respond'),
     path('patient/me/consultations/<int:case_id>/thread-events/', PatientConsultationThreadEventsView.as_view(), name='patient-consultation-thread-events'),
     path('patient/me/consultations/<int:case_id>/messages/<int:message_id>/mark-read/', PatientConsultationMessageReadView.as_view(), name='patient-consultation-message-read'),
     path('patient/me/notifications/', PatientCareNotificationListView.as_view(), name='patient-care-notifications'),

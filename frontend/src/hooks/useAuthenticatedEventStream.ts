@@ -103,7 +103,7 @@ export function useAuthenticatedEventStream(path: string | null, options?: Optio
         if (response.status === 401 || response.status === 403) {
           if (process.env.NODE_ENV !== 'production') {
             console.warn(
-              `[SSE] ${path} returned ${response.status}; not reconnecting (fix backend user↔clinician identity or redeploy API).`
+              `[SSE] ${path} returned ${response.status}; not reconnecting (fix backend user-to-clinician identity or redeploy API).`
             );
           }
           stopReconnect = true;

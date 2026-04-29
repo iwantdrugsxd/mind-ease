@@ -147,6 +147,11 @@ class PatientTrend(models.Model):
 
 
 class Appointment(models.Model):
+    class PatientResponse(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+
     STATUS_CHOICES = [
         ('scheduled', 'Scheduled'),
         ('confirmed', 'Confirmed'),
@@ -170,6 +175,13 @@ class Appointment(models.Model):
     scheduled_date = models.DateTimeField()
     duration_minutes = models.IntegerField(default=60)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
+    patient_response = models.CharField(
+        max_length=20,
+        choices=PatientResponse.choices,
+        default=PatientResponse.PENDING,
+        db_index=True,
+    )
+    patient_responded_at = models.DateTimeField(null=True, blank=True)
     
     # FHIR integration
     fhir_appointment_id = models.CharField(max_length=100, blank=True)
@@ -371,6 +383,8 @@ class CareNotification(models.Model):
         FOLLOW_UP_REMINDER = "follow_up_reminder", "Follow-up reminder"
         FOLLOW_UP_SCHEDULED = "follow_up_scheduled", "Follow-up scheduled"
         FOLLOW_UP_RESOLVED = "follow_up_resolved", "Follow-up resolved"
+        APPOINTMENT_RESPONSE_REQUIRED = "appointment_response_required", "Appointment response required"
+        REASSESSMENT_DUE = "reassessment_due", "Reassessment due"
 
     class Channel(models.TextChoices):
         IN_APP = "in_app", "In app"

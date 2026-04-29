@@ -1,5 +1,85 @@
 import api from './api';
 
+type CacheEntry<T> = {
+  value?: T;
+  expiresAt: number;
+  inFlight?: Promise<T>;
+};
+
+const memoryCache = new Map<string, CacheEntry<any>>();
+
+function readSessionCache<T>(key: string): T | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore quota / serialization failures.
+  }
+}
+
+async function withCachedResource<T>(
+  key: string,
+  ttlMs: number,
+  loader: () => Promise<T>,
+  opts?: { persist?: boolean }
+): Promise<T> {
+  const now = Date.now();
+  const cached = memoryCache.get(key) as CacheEntry<T> | undefined;
+  if (cached?.value !== undefined && cached.expiresAt > now) {
+    return cached.value;
+  }
+  if (cached?.inFlight) {
+    return cached.inFlight;
+  }
+
+  const hydrated = opts?.persist ? readSessionCache<T>(key) : null;
+  if (hydrated !== null && cached?.value === undefined) {
+    memoryCache.set(key, { value: hydrated, expiresAt: now + Math.min(ttlMs, 5_000) });
+    return hydrated;
+  }
+
+  const promise = loader()
+    .then((value) => {
+      memoryCache.set(key, { value, expiresAt: Date.now() + ttlMs });
+      if (opts?.persist) writeSessionCache(key, value);
+      return value;
+    })
+    .catch((error) => {
+      const previous = memoryCache.get(key) as CacheEntry<T> | undefined;
+      if (previous?.value !== undefined) {
+        memoryCache.set(key, { value: previous.value, expiresAt: Date.now() + 2_000 });
+      } else {
+        memoryCache.delete(key);
+      }
+      throw error;
+    });
+
+  memoryCache.set(key, {
+    value: cached?.value,
+    expiresAt: cached?.expiresAt ?? 0,
+    inFlight: promise,
+  });
+
+  return promise;
+}
+
+function invalidateCachedResource(prefix: string) {
+  for (const key of Array.from(memoryCache.keys())) {
+    if (key.startsWith(prefix)) memoryCache.delete(key);
+  }
+}
+
 /** Matches GET /api/clinician/auth/status/ */
 export interface ClinicianAuthStatus {
   has_clinician_profile: boolean;
@@ -71,6 +151,16 @@ export interface ConsultationThreadMessage {
   created_at: string;
 }
 
+export interface PendingPatientAppointment {
+  id: number;
+  appointment_type: 'initial' | 'follow_up' | 'teleconsult' | 'crisis';
+  scheduled_date: string;
+  duration_minutes: number;
+  status: 'scheduled' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
+  patient_response: 'pending' | 'accepted' | 'rejected';
+  reason?: string;
+}
+
 export interface ConsultationThread {
   id: number;
   consultation_case: number;
@@ -84,6 +174,7 @@ export interface ConsultationThread {
   created_at: string;
   updated_at: string;
   messages: ConsultationThreadMessage[];
+  pending_patient_appointment?: PendingPatientAppointment | null;
 }
 
 export interface ConsultationCaseDetail {
@@ -238,8 +329,15 @@ export async function fetchClinicianStatus(): Promise<ClinicianAuthStatus> {
 }
 
 export async function fetchClinicianProfile(): Promise<ClinicianProfile> {
-  const res = await api.get<ClinicianProfile>('/clinician/auth/me/');
-  return res.data;
+  return withCachedResource(
+    'clinician:profile',
+    60_000,
+    async () => {
+      const res = await api.get<ClinicianProfile>('/clinician/auth/me/');
+      return res.data;
+    },
+    { persist: true }
+  );
 }
 
 export async function fetchStaffClinicians(): Promise<StaffClinicianRow[]> {
@@ -279,8 +377,15 @@ export async function fetchOrphanedConsultationCases(): Promise<ConsultationList
 
 /** Assigned patients for approved clinician. */
 export async function fetchClinicianPatientSummaries(): Promise<ClinicianPatientSummary[]> {
-  const res = await api.get<{ results: ClinicianPatientSummary[] }>('/clinician/me/patient-summaries/');
-  return res.data?.results ?? [];
+  return withCachedResource(
+    'clinician:patient-summaries',
+    20_000,
+    async () => {
+      const res = await api.get<{ results: ClinicianPatientSummary[] }>('/clinician/me/patient-summaries/');
+      return res.data?.results ?? [];
+    },
+    { persist: true }
+  );
 }
 
 // ===============================
@@ -291,14 +396,21 @@ export async function fetchClinicianConsultations(params?: {
   priority?: ConsultationPriority;
   patient?: number;
 }): Promise<ConsultationListRow[]> {
-  const res = await api.get<ConsultationListRow[]>('/clinician/consultations/', {
-    params,
-  } as any);
-  // DRF may paginate; normalize results
-  const data: any = res.data as any;
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results as ConsultationListRow[];
-  return [];
+  const normalizedParams = JSON.stringify(params || {});
+  return withCachedResource(
+    `clinician:consultations:${normalizedParams}`,
+    10_000,
+    async () => {
+      const res = await api.get<ConsultationListRow[]>('/clinician/consultations/', {
+        params,
+      } as any);
+      const data: any = res.data as any;
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.results)) return data.results as ConsultationListRow[];
+      return [];
+    },
+    { persist: !params || Object.keys(params).length === 0 }
+  );
 }
 
 export async function fetchConsultationCaseDetail(caseId: number): Promise<ConsultationCaseDetail> {
@@ -338,8 +450,15 @@ export async function markConsultationMessageRead(caseId: number, messageId: num
 // Phase 3: Patient-side consultation API helpers
 // ===============================
 export async function fetchPatientConsultations(): Promise<PatientConsultationListRow[]> {
-  const res = await api.get<{ results: PatientConsultationListRow[] }>('/clinician/patient/me/consultations/');
-  return Array.isArray(res.data?.results) ? res.data.results : [];
+  return withCachedResource(
+    'patient:consultations',
+    10_000,
+    async () => {
+      const res = await api.get<{ results: PatientConsultationListRow[] }>('/clinician/patient/me/consultations/');
+      return Array.isArray(res.data?.results) ? res.data.results : [];
+    },
+    { persist: true }
+  );
 }
 
 export async function fetchPatientConsultationThread(caseId: number): Promise<ConsultationThread | null> {
@@ -352,11 +471,29 @@ export async function fetchPatientConsultationThread(caseId: number): Promise<Co
 
 export async function sendPatientConsultationMessage(caseId: number, content: string): Promise<ConsultationThreadMessage> {
   const res = await api.post<ConsultationThreadMessage>('/clinician/patient/me/consultations/thread/', { case_id: caseId, content });
+  invalidateCachedResource('patient:consultations');
+  invalidateCachedResource('patient:care-team-summary');
+  invalidateCachedResource('patient:care-notifications');
   return res.data;
 }
 
 export async function markPatientConsultationMessageRead(caseId: number, messageId: number): Promise<void> {
   await api.post(`/clinician/patient/me/consultations/${caseId}/messages/${messageId}/mark-read/`, {});
+  invalidateCachedResource('patient:consultations');
+  invalidateCachedResource('patient:care-team-summary');
+}
+
+export async function respondToPatientAppointment(
+  appointmentId: number,
+  response: 'accepted' | 'rejected'
+): Promise<PendingPatientAppointment> {
+  const res = await api.post<PendingPatientAppointment>(`/clinician/patient/me/appointments/${appointmentId}/respond/`, { response });
+  invalidateCachedResource('patient:consultations');
+  invalidateCachedResource('patient:care-team-summary');
+  invalidateCachedResource('patient:care-notifications');
+  invalidateCachedResource('clinician:consultations:');
+  invalidateCachedResource('clinician:consultation-summary');
+  return res.data;
 }
 
 // ===============================
@@ -364,6 +501,8 @@ export async function markPatientConsultationMessageRead(caseId: number, message
 // ===============================
 export async function setConsultationStatus(caseId: number, status: ConsultationStatus): Promise<ConsultationCaseDetail> {
   const res = await api.post<ConsultationCaseDetail>(`/clinician/consultations/${caseId}/set-status/`, { status });
+  invalidateCachedResource('clinician:consultations:');
+  invalidateCachedResource('clinician:consultation-summary');
   return res.data;
 }
 
@@ -376,6 +515,8 @@ export async function createLinkedAppointment(input: {
   consultation_case?: number | null;
 }): Promise<any> {
   const res = await api.post('/clinician/appointments/', input);
+  invalidateCachedResource('clinician:consultations:');
+  invalidateCachedResource('clinician:consultation-summary');
   return res.data;
 }
 
@@ -386,6 +527,7 @@ export async function createLinkedNote(input: {
   consultation_case?: number | null;
 }): Promise<any> {
   const res = await api.post('/clinician/clinical-notes/', input);
+  invalidateCachedResource('clinician:consultations:');
   return res.data;
 }
 
@@ -433,8 +575,15 @@ export interface PatientCareTeamSummary {
 }
 
 export async function fetchClinicianConsultationSummary(): Promise<ClinicianConsultationSummary> {
-  const res = await api.get<ClinicianConsultationSummary>('/clinician/me/consultation-summary/');
-  return res.data;
+  return withCachedResource(
+    'clinician:consultation-summary',
+    10_000,
+    async () => {
+      const res = await api.get<ClinicianConsultationSummary>('/clinician/me/consultation-summary/');
+      return res.data;
+    },
+    { persist: true }
+  );
 }
 
 export async function fetchClinicianEscalations(params?: {
@@ -457,14 +606,22 @@ export async function updateClinicianEscalationAction(
 }
 
 export async function fetchPatientCareTeamSummary(): Promise<PatientCareTeamSummary> {
-  const res = await api.get<PatientCareTeamSummary>('/clinician/patient/me/care-team-summary/');
-  return res.data;
+  return withCachedResource(
+    'patient:care-team-summary',
+    10_000,
+    async () => {
+      const res = await api.get<PatientCareTeamSummary>('/clinician/patient/me/care-team-summary/');
+      return res.data;
+    },
+    { persist: true }
+  );
 }
 
 export interface CareNotification {
   id: number;
   consultation_case_id?: number | null;
-  notification_type: 'care_team_message' | 'follow_up_scheduled' | 'follow_up_resolved';
+  related_appointment_id?: number | null;
+  notification_type: 'care_team_message' | 'follow_up_scheduled' | 'follow_up_resolved' | 'appointment_response_required' | 'reassessment_due' | 'follow_up_reminder';
   channel: 'in_app' | 'email' | 'sms';
   title: string;
   body: string;
@@ -477,12 +634,21 @@ export interface CareNotification {
 }
 
 export async function fetchPatientCareNotifications(): Promise<CareNotification[]> {
-  const res = await api.get<{ results: CareNotification[] }>('/clinician/patient/me/notifications/');
-  return Array.isArray(res.data?.results) ? res.data.results : [];
+  return withCachedResource(
+    'patient:care-notifications',
+    10_000,
+    async () => {
+      const res = await api.get<{ results: CareNotification[] }>('/clinician/patient/me/notifications/');
+      return Array.isArray(res.data?.results) ? res.data.results : [];
+    },
+    { persist: true }
+  );
 }
 
 export async function markPatientCareNotificationRead(notificationId: number): Promise<void> {
   await api.post(`/clinician/patient/me/notifications/${notificationId}/mark-read/`, {});
+  invalidateCachedResource('patient:care-notifications');
+  invalidateCachedResource('patient:care-team-summary');
 }
 
 export interface ClinicianRegistrationPayload {

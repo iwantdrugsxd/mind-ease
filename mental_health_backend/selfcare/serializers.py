@@ -42,11 +42,13 @@ class PatientSelfCareProgressSerializer(serializers.ModelSerializer):
 
 class ExerciseCompletionSerializer(serializers.ModelSerializer):
     exercise_name = serializers.CharField(source='exercise.name', read_only=True)
+    patient = serializers.PrimaryKeyRelatedField(read_only=True)
     
     class Meta:
         model = ExerciseCompletion
         fields = ['id', 'patient', 'exercise', 'exercise_name', 'completed_at',
                  'duration_actual', 'rating', 'notes']
+        read_only_fields = ['id', 'patient', 'completed_at']
 
 
 class MoodEntrySerializer(serializers.ModelSerializer):
@@ -99,4 +101,3 @@ class ExerciseProgressSerializer(serializers.Serializer):
     completed_count = serializers.IntegerField()
     last_completed = serializers.DateTimeField()
     average_rating = serializers.FloatField()
-

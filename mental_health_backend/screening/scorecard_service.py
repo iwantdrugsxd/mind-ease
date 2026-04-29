@@ -299,6 +299,10 @@ def build_clinician_patient_summary(patient: Patient) -> Dict[str, Any]:
     Clinician assignment row: scorecard as canonical clinical core + consent-gated onboarding fields.
     Uses a single readonly orchestration pass shared with the scorecard payload.
     """
+    cached = getattr(patient, "_clinician_patient_summary_cached", None)
+    if cached is not None:
+        return cached
+
     try:
         state = build_user_state_summary_readonly(patient)
     except Exception:
@@ -311,10 +315,12 @@ def build_clinician_patient_summary(patient: Patient) -> Dict[str, Any]:
     mood = state.get("mood_trend") or {}
     readiness = state.get("readiness") or {}
 
-    high_risk_alerts = ScreeningAlert.objects.filter(patient=patient, is_resolved=False).count()
+    high_risk_alerts = getattr(patient, "_unresolved_alert_count", None)
+    if high_risk_alerts is None:
+        high_risk_alerts = ScreeningAlert.objects.filter(patient=patient, is_resolved=False).count()
 
     nba = sc.get("next_best_action") or {}
-    return {
+    payload = {
         "patient_id": patient.id,
         "consented_for_clinician_access": consented,
         "preferred_name": (profile.get("preferred_name") or "") if consented else "",
@@ -345,3 +351,5 @@ def build_clinician_patient_summary(patient: Patient) -> Dict[str, Any]:
         "flags": sc.get("flags"),
         "scorecard_version": sc["scorecard_version"],
     }
+    setattr(patient, "_clinician_patient_summary_cached", payload)
+    return payload

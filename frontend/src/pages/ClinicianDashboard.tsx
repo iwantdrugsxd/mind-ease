@@ -32,11 +32,48 @@ const ClinicianDashboard: React.FC = () => {
   const [queue, setQueue] = useState<ConsultationListRow[]>([]);
   const [queueLoading, setQueueLoading] = useState(true);
   const [summaryStats, setSummaryStats] = useState<ClinicianConsultationSummary | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem('clinician:dashboard:view');
+      if (!raw) {
+        setHydrated(true);
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        profile: ClinicianProfile | null;
+        summaries: ClinicianPatientSummary[];
+        queue: ConsultationListRow[];
+        summaryStats: ClinicianConsultationSummary | null;
+      };
+      if (parsed.profile) setProfile(parsed.profile);
+      if (Array.isArray(parsed.summaries)) setSummaries(parsed.summaries);
+      if (Array.isArray(parsed.queue)) setQueue(parsed.queue);
+      if (parsed.summaryStats) setSummaryStats(parsed.summaryStats);
+    } catch {
+      // Ignore hydration failures.
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.sessionStorage.setItem(
+        'clinician:dashboard:view',
+        JSON.stringify({ profile, summaries, queue, summaryStats })
+      );
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [hydrated, profile, summaries, queue, summaryStats]);
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    const isInitial = !profile && summaries.length === 0;
+    if (isInitial) setLoading(true);
     try {
       const [rows, me] = await Promise.all([
         fetchClinicianPatientSummaries(),
@@ -44,20 +81,23 @@ const ClinicianDashboard: React.FC = () => {
       ]);
       setSummaries(sortPatientSummariesForPriority(rows));
       setProfile(me);
+      setError(null);
     } catch (e: any) {
-      setError(e?.message || 'Could not load dashboard data.');
-      setSummaries([]);
+      if (!summaries.length) {
+        setError(e?.message || 'Could not load dashboard data.');
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [profile, summaries.length]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const loadQueue = useCallback(async () => {
-    setQueueLoading(true);
+    const isInitial = queue.length === 0 && !summaryStats;
+    if (isInitial) setQueueLoading(true);
     try {
       const [rows, stats] = await Promise.all([
         fetchClinicianConsultations({}),
@@ -66,11 +106,11 @@ const ClinicianDashboard: React.FC = () => {
       setQueue(rows);
       setSummaryStats(stats);
     } catch {
-      setQueue([]);
+      // Preserve current queue during background refresh failures.
     } finally {
       setQueueLoading(false);
     }
-  }, []);
+  }, [queue.length, summaryStats]);
 
   useEffect(() => {
     void loadQueue();
@@ -84,7 +124,11 @@ const ClinicianDashboard: React.FC = () => {
     onUpdate: () => void loadQueue(),
   });
 
-  if (loading) {
+  if (loading && !hydrated && summaries.length === 0 && queue.length === 0) {
+    return <ClinicianLoadingState message="Loading assigned patients and signals…" showSkeleton />;
+  }
+
+  if (loading && summaries.length === 0 && queue.length === 0) {
     return <ClinicianLoadingState message="Loading assigned patients and signals…" showSkeleton />;
   }
 

@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional, Tuple
 import firebase_admin
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.db import OperationalError, ProgrammingError
 from firebase_admin import auth, credentials
 from rest_framework import authentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -79,29 +80,34 @@ def _upsert_firebase_identity_link(user: User, firebase_uid: str, email: str = "
     if not user:
         raise AuthenticationFailed("Cannot link Firebase account without a backend user.")
 
-    existing_uid_link = FirebaseIdentityLink.objects.select_related("user").filter(firebase_uid=firebase_uid).first()
-    if existing_uid_link:
-        if existing_uid_link.user_id != user.id:
-            raise AuthenticationFailed("This Firebase account is already linked to a different backend account.")
-        if email and existing_uid_link.email != email:
-            existing_uid_link.email = email
-            existing_uid_link.save(update_fields=["email", "updated_at"])
-        return user
+    try:
+        existing_uid_link = FirebaseIdentityLink.objects.select_related("user").filter(firebase_uid=firebase_uid).first()
+        if existing_uid_link:
+            if existing_uid_link.user_id != user.id:
+                raise AuthenticationFailed("This Firebase account is already linked to a different backend account.")
+            if email and existing_uid_link.email != email:
+                existing_uid_link.email = email
+                existing_uid_link.save(update_fields=["email", "updated_at"])
+            return user
 
-    existing_user_link = FirebaseIdentityLink.objects.filter(user=user).first()
-    if existing_user_link:
-        if existing_user_link.firebase_uid != firebase_uid:
-            raise AuthenticationFailed("This backend account is already linked to a different Firebase account.")
-        if email and existing_user_link.email != email:
-            existing_user_link.email = email
-            existing_user_link.save(update_fields=["email", "updated_at"])
-        return user
+        existing_user_link = FirebaseIdentityLink.objects.filter(user=user).first()
+        if existing_user_link:
+            if existing_user_link.firebase_uid != firebase_uid:
+                raise AuthenticationFailed("This backend account is already linked to a different Firebase account.")
+            if email and existing_user_link.email != email:
+                existing_user_link.email = email
+                existing_user_link.save(update_fields=["email", "updated_at"])
+            return user
 
-    FirebaseIdentityLink.objects.create(
-        user=user,
-        firebase_uid=firebase_uid,
-        email=email or user.email or "",
-    )
+        FirebaseIdentityLink.objects.create(
+            user=user,
+            firebase_uid=firebase_uid,
+            email=email or user.email or "",
+        )
+    except (OperationalError, ProgrammingError):
+        logger.warning(
+            "FirebaseIdentityLink table unavailable; continuing with legacy auth resolution until migrations are applied."
+        )
     return user
 
 
@@ -109,43 +115,26 @@ def resolve_user_from_firebase_uid(firebase_uid: str, decoded_token: Optional[Di
     from .models import FirebaseIdentityLink, Patient
     from clinician.models import Clinician
 
-    linked_user_id = (
-        FirebaseIdentityLink.objects.filter(firebase_uid=firebase_uid)
-        .values_list("user_id", flat=True)
-        .first()
-    )
+    email = (decoded_token.get("email") or "").strip().lower() if decoded_token else ""
+
+    try:
+        linked_user_id = (
+            FirebaseIdentityLink.objects.filter(firebase_uid=firebase_uid)
+            .values_list("user_id", flat=True)
+            .first()
+        )
+    except (OperationalError, ProgrammingError):
+        linked_user_id = None
     if linked_user_id:
         user = User.objects.get(id=linked_user_id)
-        email = (decoded_token.get("email") or "").strip().lower() if decoded_token else ""
         user_email = (user.email or "").strip().lower()
         if email and user_email and email != user_email:
             raise AuthenticationFailed("This Firebase account is already linked to a different backend account.")
         return _upsert_firebase_identity_link(user, firebase_uid, email=email)
 
-    patient = Patient.objects.select_related("user").filter(firebase_uid=firebase_uid).first()
-    if patient:
-        email = (decoded_token.get("email") or "").strip().lower() if decoded_token else ""
-        pu = patient.user
-        patient_email = (pu.email or "").strip().lower()
-        if email and patient_email and email != patient_email:
-            raise AuthenticationFailed("This Firebase account is already linked to a different backend account.")
-        return _upsert_firebase_identity_link(pu, firebase_uid, email=email)
-
-    email = ""
-    first_name = "Firebase"
-    last_name = "User"
-    if decoded_token:
-        email = (decoded_token.get("email") or "").strip().lower()
-        name = (decoded_token.get("name") or "").strip()
-        if name:
-            parts = name.split(" ", 1)
-            first_name = parts[0]
-            last_name = parts[1] if len(parts) > 1 else ""
-
-    # Production safety: clinician profiles may already exist on a legacy/backend-created
-    # Django user before the first Firebase-authenticated request for that UID arrives.
-    # If the verified token email maps to exactly one existing backend user, reuse it
-    # instead of silently creating a parallel account that loses the clinician profile link.
+    # Prefer an existing clinician account for this verified email before falling back to a
+    # Patient row keyed by firebase_uid. Otherwise a clinician can be resolved as a patient-only
+    # Django user on reload and lose access to the clinician console.
     if email:
         clinician_user_ids = list(
             Clinician.objects.filter(user__email__iexact=email)
@@ -161,6 +150,28 @@ def resolve_user_from_firebase_uid(firebase_uid: str, decoded_token: Optional[Di
                 len(clinician_user_ids),
             )
 
+    patient = Patient.objects.select_related("user").filter(firebase_uid=firebase_uid).first()
+    if patient:
+        pu = patient.user
+        patient_email = (pu.email or "").strip().lower()
+        if email and patient_email and email != patient_email:
+            raise AuthenticationFailed("This Firebase account is already linked to a different backend account.")
+        return _upsert_firebase_identity_link(pu, firebase_uid, email=email)
+
+    first_name = "Firebase"
+    last_name = "User"
+    if decoded_token:
+        name = (decoded_token.get("name") or "").strip()
+        if name:
+            parts = name.split(" ", 1)
+            first_name = parts[0]
+            last_name = parts[1] if len(parts) > 1 else ""
+
+    # Production safety: clinician profiles may already exist on a legacy/backend-created
+    # Django user before the first Firebase-authenticated request for that UID arrives.
+    # If the verified token email maps to exactly one existing backend user, reuse it
+    # instead of silently creating a parallel account that loses the clinician profile link.
+    if email:
         matching_users = list(User.objects.filter(email__iexact=email).order_by("id"))
         if len(matching_users) == 1:
             return _upsert_firebase_identity_link(matching_users[0], firebase_uid, email=email)
@@ -192,6 +203,9 @@ class FirebaseAuthentication(authentication.BaseAuthentication):
     """
 
     keyword = "Bearer"
+
+    def authenticate_header(self, request) -> str:
+        return self.keyword
 
     def authenticate(self, request) -> Optional[Tuple[User, Dict[str, Any]]]:
         auth_header = authentication.get_authorization_header(request).decode("utf-8")

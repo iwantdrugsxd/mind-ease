@@ -211,7 +211,7 @@ class ClinicianPhase1RegistrationTests(APITestCase):
         self.assertEqual(res.status_code, 200)
         self.assertIn("results", res.data)
 
-    def test_rejected_clinician_cannot_access_patient_summaries(self):
+    def test_rejected_clinician_can_access_patient_summaries_in_simplified_console_flow(self):
         u = User.objects.create_user(username="firebase_rejected", email="rej@example.com")
         Patient.objects.create(user=u, firebase_uid="uid-rejected-clin")
         c = Clinician.objects.create(
@@ -226,7 +226,8 @@ class ClinicianPhase1RegistrationTests(APITestCase):
         PatientAssignment.objects.create(patient=patient, clinician=c, is_active=True)
         self.client.force_authenticate(user=u)
         res = self.client.get("/api/clinician/me/patient-summaries/")
-        self.assertEqual(res.status_code, 403)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("results", res.data)
 
     @patch("screening.firebase_auth.initialize_firebase_admin", return_value=True)
     @patch("screening.firebase_auth.auth.verify_id_token", return_value={"uid": "uid-approved-clin"})
@@ -591,12 +592,12 @@ class ConsultationFoundationTests(APITestCase):
         )
         self.assertEqual(create.status_code, 201)
         case.refresh_from_db()
-        self.assertEqual(case.status, "scheduled")
+        self.assertEqual(case.status, "awaiting_patient")
         self.client.force_authenticate(user=self.pat_user)
         res = self.client.get("/api/clinician/patient/me/consultations/")
         self.assertEqual(res.status_code, 200)
         row = res.data["results"][0]
-        self.assertEqual(row["status"], "scheduled")
+        self.assertEqual(row["status"], "awaiting_patient")
         self.assertEqual(row["next_appointment_status"], "scheduled")
         self.assertIsNotNone(row["next_appointment_at"])
         self.assertEqual(row["next_appointment_at"].year, 2026)
@@ -699,7 +700,7 @@ class ConsultationFoundationTests(APITestCase):
         )
         case = ensure_consultation_case_for_assignment(self.clinician, self.patient)
         self.client.force_authenticate(user=self.clin_user)
-        self.client.post(
+        create = self.client.post(
             "/api/clinician/appointments/",
             {
                 "patient": self.patient.id,
@@ -714,7 +715,8 @@ class ConsultationFoundationTests(APITestCase):
         detail = self.client.get(f"/api/clinician/patient/me/consultations/thread/?case_id={case.id}")
         self.assertEqual(detail.status_code, 200)
         sys_msgs = [m for m in detail.data["messages"] if m["sender_type"] == "system"]
-        self.assertTrue(any("scheduled" in m["content"].lower() for m in sys_msgs))
+        self.assertTrue(any("accept or reject" in m["content"].lower() for m in sys_msgs))
+        self.assertEqual(detail.data["pending_patient_appointment"]["id"], create.data["id"])
 
     def test_linked_appointment_recreates_missing_thread_and_still_notifies_patient(self):
         PHQ9Screening.objects.create(
@@ -747,6 +749,77 @@ class ConsultationFoundationTests(APITestCase):
                 for m in detail.data["messages"]
             )
         )
+
+    def test_patient_can_accept_appointment_from_chat_flow(self):
+        PHQ9Screening.objects.create(
+            patient=self.patient,
+            q1_interest=3, q2_depressed=3, q3_sleep=3, q4_energy=3, q5_appetite=3, q6_self_esteem=3, q7_concentration=3, q8_psychomotor=3, q9_suicidal=0,
+            total_score=0, severity_level="severe", risk_level="high"
+        )
+        case = ensure_consultation_case_for_assignment(self.clinician, self.patient)
+        self.client.force_authenticate(user=self.clin_user)
+        create = self.client.post(
+            "/api/clinician/appointments/",
+            {
+                "patient": self.patient.id,
+                "appointment_type": "follow_up",
+                "scheduled_date": "2026-04-07T10:00:00Z",
+                "duration_minutes": 45,
+                "consultation_case": case.id,
+            },
+            format="json",
+        )
+        self.assertEqual(create.status_code, 201)
+        case.refresh_from_db()
+        self.assertEqual(case.status, "awaiting_patient")
+
+        self.client.force_authenticate(user=self.pat_user)
+        respond = self.client.post(
+            f"/api/clinician/patient/me/appointments/{create.data['id']}/respond/",
+            {"response": "accepted"},
+            format="json",
+        )
+        self.assertEqual(respond.status_code, 200)
+        self.assertEqual(respond.data["patient_response"], "accepted")
+        self.assertEqual(respond.data["status"], "confirmed")
+        case.refresh_from_db()
+        self.assertEqual(case.status, "scheduled")
+        detail = self.client.get(f"/api/clinician/patient/me/consultations/thread/?case_id={case.id}")
+        self.assertIsNone(detail.data["pending_patient_appointment"])
+        self.assertTrue(any("accepted the appointment" in m["content"].lower() for m in detail.data["messages"]))
+
+    def test_patient_can_reject_appointment_from_chat_flow(self):
+        PHQ9Screening.objects.create(
+            patient=self.patient,
+            q1_interest=3, q2_depressed=3, q3_sleep=3, q4_energy=3, q5_appetite=3, q6_self_esteem=3, q7_concentration=3, q8_psychomotor=3, q9_suicidal=0,
+            total_score=0, severity_level="severe", risk_level="high"
+        )
+        case = ensure_consultation_case_for_assignment(self.clinician, self.patient)
+        self.client.force_authenticate(user=self.clin_user)
+        create = self.client.post(
+            "/api/clinician/appointments/",
+            {
+                "patient": self.patient.id,
+                "appointment_type": "follow_up",
+                "scheduled_date": "2026-04-08T10:00:00Z",
+                "duration_minutes": 45,
+                "consultation_case": case.id,
+            },
+            format="json",
+        )
+        self.assertEqual(create.status_code, 201)
+
+        self.client.force_authenticate(user=self.pat_user)
+        respond = self.client.post(
+            f"/api/clinician/patient/me/appointments/{create.data['id']}/respond/",
+            {"response": "rejected"},
+            format="json",
+        )
+        self.assertEqual(respond.status_code, 200)
+        self.assertEqual(respond.data["patient_response"], "rejected")
+        self.assertEqual(respond.data["status"], "cancelled")
+        case.refresh_from_db()
+        self.assertEqual(case.status, "awaiting_clinician")
 
     def test_staff_assignment_endpoints_require_staff(self):
         self.client.force_authenticate(user=self.pat_user)
@@ -887,6 +960,34 @@ class ConsultationFoundationTests(APITestCase):
         self.assertEqual(mark.status_code, 200)
         summary = self.client.get("/api/clinician/patient/me/care-team-summary/")
         self.assertEqual(summary.data["unread_notifications"], 0)
+
+    def test_reassessment_due_notification_is_created_once_after_two_weeks(self):
+        screening = PHQ9Screening.objects.create(
+            patient=self.patient,
+            q1_interest=1, q2_depressed=1, q3_sleep=1, q4_energy=1, q5_appetite=1, q6_self_esteem=1, q7_concentration=1, q8_psychomotor=1, q9_suicidal=0,
+            total_score=0, severity_level="mild", risk_level="low",
+        )
+        PHQ9Screening.objects.filter(id=screening.id).update(created_at=timezone.now() - timedelta(days=15))
+        status_obj, _ = PatientOnboardingStatus.objects.get_or_create(patient=self.patient)
+        status_obj.account_completed_at = timezone.now()
+        status_obj.profile_completed_at = timezone.now()
+        status_obj.baseline_completed_at = timezone.now()
+        status_obj.consent_completed_at = timezone.now()
+        status_obj.assessment_completed_at = timezone.now()
+        status_obj.advanced_completed_at = timezone.now()
+        status_obj.onboarding_completed_at = timezone.now()
+        status_obj.save()
+
+        self.client.force_authenticate(user=self.pat_user)
+        first = self.client.get("/api/clinician/patient/me/notifications/")
+        self.assertEqual(first.status_code, 200)
+        due_notifications = [n for n in first.data["results"] if n["notification_type"] == "reassessment_due"]
+        self.assertEqual(len(due_notifications), 1)
+
+        second = self.client.get("/api/clinician/patient/me/notifications/")
+        self.assertEqual(second.status_code, 200)
+        due_notifications_second = [n for n in second.data["results"] if n["notification_type"] == "reassessment_due"]
+        self.assertEqual(len(due_notifications_second), 1)
 
     def test_overdue_awaiting_patient_creates_reminder_and_escalation(self):
         PHQ9Screening.objects.create(

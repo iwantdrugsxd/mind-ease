@@ -25,15 +25,10 @@ def require_clinician(user: User) -> Clinician:
 
 def require_approved_clinician(user: User) -> Clinician:
     """
-    Require a clinician profile that is allowed to use clinical APIs.
-    Rejected accounts are blocked; pending and approved are allowed (open access / no manual gate).
+    Simplified clinician gate for the current product:
+    any existing clinician profile may access the clinician console and APIs.
     """
-    c = require_clinician(user)
-    if c.status == Clinician.Status.REJECTED:
-        raise PermissionDenied(
-            "This clinician account cannot access this resource."
-        )
-    return c
+    return require_clinician(user)
 
 
 # ===============================

@@ -5,9 +5,9 @@ import { getAuth } from 'firebase/auth';
 import ScreeningQuestionPanel from '../components/ScreeningQuestionPanel';
 import { gad7Questions, phq9Questions } from '../data/screeningQuestions';
 
-type StepKey = 'account' | 'profile' | 'baseline' | 'consent' | 'assessment' | 'advanced' | 'complete';
+type StepKey = 'account' | 'profile' | 'baseline' | 'consent' | 'assessment' | 'guardian' | 'advanced' | 'complete';
 
-const steps: StepKey[] = ['account', 'profile', 'baseline', 'consent', 'assessment', 'advanced', 'complete'];
+const steps: StepKey[] = ['account', 'profile', 'baseline', 'consent', 'assessment', 'guardian', 'advanced', 'complete'];
 
 const Register: React.FC = () => {
   const { register: registerAccount, user } = useAuth();
@@ -99,7 +99,16 @@ const Register: React.FC = () => {
         else if (!s.baseline_step_completed) setCurrentStep('baseline');
         else if (!s.consent_step_completed) setCurrentStep('consent');
         else if (!s.assessment_completed) setCurrentStep('assessment');
-        else if (!s.onboarding_completed_at && !s.advanced_step_completed) setCurrentStep('advanced');
+        else if (!s.onboarding_completed_at && !s.advanced_step_completed) {
+          let guardianDone = false;
+          try {
+            const saved = localStorage.getItem('onboarding_draft');
+            guardianDone = !!(saved && JSON.parse(saved)?.guardian?.completed);
+          } catch {
+            guardianDone = false;
+          }
+          setCurrentStep(guardianDone ? 'advanced' : 'guardian');
+        }
         else setCurrentStep('complete');
       } catch (e) {
         // ignore
@@ -201,6 +210,58 @@ const Register: React.FC = () => {
     }
   };
 
+  const saveGuardian = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const payload = draft.guardian || {};
+      const status = payload.guardian_status || 'guardian_required';
+      const guardianName = String(payload.guardian_name || '').trim();
+      const guardianRelationship = String(payload.guardian_relationship || '').trim();
+      const guardianPhone = String(payload.guardian_phone || '').trim();
+      const guardianEmail = String(payload.guardian_email || '').trim();
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (!guardianName) {
+        setError('Please enter guardian full name');
+        setLoading(false);
+        return;
+      }
+      if (!guardianRelationship) {
+        setError('Please select guardian relationship');
+        setLoading(false);
+        return;
+      }
+      if (!guardianPhone && !guardianEmail) {
+        setError('Please provide a phone number or email for guardian contact');
+        setLoading(false);
+        return;
+      }
+      if (guardianEmail && !emailPattern.test(guardianEmail)) {
+        setError('Please enter a valid guardian email');
+        setLoading(false);
+        return;
+      }
+
+      setDraft((d: any) => ({
+        ...d,
+        guardian: {
+          ...(d.guardian || {}),
+          guardian_status: status,
+          guardian_name: guardianName,
+          guardian_relationship: guardianRelationship,
+          guardian_phone: guardianPhone,
+          guardian_email: guardianEmail,
+          guardian_notes: payload.guardian_notes || '',
+          completed: true,
+        },
+      }));
+      goNext('advanced');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAssessmentChoice = async (choice: 'yes' | 'no') => {
     setLoading(true);
     setError(null);
@@ -208,7 +269,7 @@ const Register: React.FC = () => {
       const offered = choice === 'yes';
       await api.post('/screening/onboarding/assessment/offer/', { offered });
       if (choice === 'no') {
-        goNext('advanced');
+        goNext('guardian');
       } else {
         setAssessmentFlow('phq9');
         setAssessmentQuestionIndex(0);
@@ -617,6 +678,118 @@ const Register: React.FC = () => {
             <div className="mt-4 flex flex-col sm:flex-row gap-2">
               <button onClick={goBack} className="px-4 py-2 border rounded">Back</button>
               <button onClick={saveConsent} disabled={loading} className="px-4 py-2 bg-primary-600 text-white rounded">
+                {loading ? 'Saving...' : 'Save & Continue'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {currentStep === 'guardian' && (
+          <>
+            <StepHeader title="Guardian information" />
+            <p className="text-sm text-gray-600 mb-4">
+              Add guardian or emergency-contact information if this account should include a responsible adult or backup contact.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Contact type</label>
+                <select
+                  className="w-full border rounded px-3 py-2"
+                  value={draft.guardian?.guardian_status || 'guardian_required'}
+                  onChange={(e) =>
+                    setDraft((d: any) => ({
+                      ...d,
+                      guardian: { ...(d.guardian || {}), guardian_status: e.target.value },
+                    }))
+                  }
+                >
+                  <option value="guardian_required">Guardian</option>
+                  <option value="emergency_contact_only">Emergency contact</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Full name</label>
+                <input
+                  className="w-full border rounded px-3 py-2"
+                  value={draft.guardian?.guardian_name || ''}
+                  onChange={(e) =>
+                    setDraft((d: any) => ({
+                      ...d,
+                      guardian: { ...(d.guardian || {}), guardian_name: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Relationship</label>
+                <select
+                  className="w-full border rounded px-3 py-2"
+                  value={draft.guardian?.guardian_relationship || ''}
+                  onChange={(e) =>
+                    setDraft((d: any) => ({
+                      ...d,
+                      guardian: { ...(d.guardian || {}), guardian_relationship: e.target.value },
+                    }))
+                  }
+                >
+                  <option value="">Select relationship</option>
+                  <option value="parent">parent</option>
+                  <option value="mother">mother</option>
+                  <option value="father">father</option>
+                  <option value="legal_guardian">legal_guardian</option>
+                  <option value="spouse">spouse</option>
+                  <option value="sibling">sibling</option>
+                  <option value="relative">relative</option>
+                  <option value="caregiver">caregiver</option>
+                  <option value="other">other</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Phone number</label>
+                  <input
+                    className="w-full border rounded px-3 py-2"
+                    value={draft.guardian?.guardian_phone || ''}
+                    onChange={(e) =>
+                      setDraft((d: any) => ({
+                        ...d,
+                        guardian: { ...(d.guardian || {}), guardian_phone: e.target.value },
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Email address</label>
+                  <input
+                    type="email"
+                    className="w-full border rounded px-3 py-2"
+                    value={draft.guardian?.guardian_email || ''}
+                    onChange={(e) =>
+                      setDraft((d: any) => ({
+                        ...d,
+                        guardian: { ...(d.guardian || {}), guardian_email: e.target.value },
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Notes (optional)</label>
+                <input
+                  className="w-full border rounded px-3 py-2"
+                  value={draft.guardian?.guardian_notes || ''}
+                  onChange={(e) =>
+                    setDraft((d: any) => ({
+                      ...d,
+                      guardian: { ...(d.guardian || {}), guardian_notes: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col sm:flex-row gap-2">
+              <button onClick={goBack} className="px-4 py-2 border rounded">Back</button>
+              <button onClick={saveGuardian} disabled={loading} className="px-4 py-2 bg-primary-600 text-white rounded">
                 {loading ? 'Saving...' : 'Save & Continue'}
               </button>
             </div>

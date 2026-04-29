@@ -359,36 +359,38 @@ const ClinicianRegister: React.FC = () => {
       {step === 2 && (
         <div className={`${clinPanelMuted} p-5 sm:p-6 space-y-4 clinician-auth-enter`}>
           <h2 className="text-base font-bold text-slate-900 tracking-tight">Professional credentials</h2>
-          <div>
-            <label className={clinLabel}>Professional phone</label>
-            <input className={clinInput} required value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </div>
-          <div>
-            <label className={clinLabel}>License number</label>
-            <input className={clinInput} required value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />
-          </div>
-          <div>
-            <label className={clinLabel}>Specialization</label>
-            <input className={clinInput} required value={specialization} onChange={(e) => setSpecialization(e.target.value)} />
-          </div>
-          <div>
-            <label className={clinLabel}>Qualification / credentials</label>
-            <input className={clinInput} value={qualification} onChange={(e) => setQualification(e.target.value)} />
-          </div>
-          <div>
-            <label className={clinLabel}>Years of experience</label>
-            <input
-              className={clinInput}
-              type="number"
-              min={0}
-              max={80}
-              value={yearsExperience}
-              onChange={(e) => setYearsExperience(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className={clinLabel}>Organization / practice (optional)</label>
-            <input className={clinInput} value={organization} onChange={(e) => setOrganization(e.target.value)} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className={clinLabel}>Professional phone</label>
+              <input className={clinInput} required value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
+            <div>
+              <label className={clinLabel}>License number</label>
+              <input className={clinInput} required value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />
+            </div>
+            <div>
+              <label className={clinLabel}>Specialization</label>
+              <input className={clinInput} required value={specialization} onChange={(e) => setSpecialization(e.target.value)} />
+            </div>
+            <div>
+              <label className={clinLabel}>Qualification / credentials</label>
+              <input className={clinInput} value={qualification} onChange={(e) => setQualification(e.target.value)} />
+            </div>
+            <div>
+              <label className={clinLabel}>Years of experience</label>
+              <input
+                className={clinInput}
+                type="number"
+                min={0}
+                max={80}
+                value={yearsExperience}
+                onChange={(e) => setYearsExperience(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={clinLabel}>Organization / practice</label>
+              <input className={clinInput} value={organization} onChange={(e) => setOrganization(e.target.value)} />
+            </div>
           </div>
           <div>
             <label className={clinLabel}>Professional bio (optional)</label>
@@ -400,20 +402,25 @@ const ClinicianRegister: React.FC = () => {
       {step === 3 && (
         <div className={`${clinPanelMuted} p-5 sm:p-6 space-y-4 clinician-auth-enter`}>
           <h2 className="text-base font-bold text-slate-900 tracking-tight">Practice preferences</h2>
-          <div>
-            <label className={clinLabel}>Max patients per day (optional)</label>
-            <input
-              className={clinInput}
-              type="number"
-              min={1}
-              max={500}
-              value={maxPatientsPerDay}
-              onChange={(e) => setMaxPatientsPerDay(e.target.value)}
-            />
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,220px)_1fr]">
+            <div>
+              <label className={clinLabel}>Max patients per day</label>
+              <input
+                className={clinInput}
+                type="number"
+                min={1}
+                max={500}
+                value={maxPatientsPerDay}
+                onChange={(e) => setMaxPatientsPerDay(e.target.value)}
+              />
+            </div>
+            <div className="rounded-xl border border-slate-200/90 bg-white/70 px-4 py-3 text-sm text-slate-600">
+              Keep this realistic. It affects queue pressure, scheduling quality, and care responsiveness.
+            </div>
           </div>
           <fieldset>
             <legend className={clinLabel}>Communication modes</legend>
-            <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+            <div className="grid gap-2 sm:grid-cols-2 rounded-xl border border-slate-100 bg-slate-50/50 p-3">
               {MODE_OPTIONS.map((opt, idx) => {
                 const checked = [modeEmail, modeVideo, modeCall, modeChat][idx];
                 const setters = [setModeEmail, setModeVideo, setModeCall, setModeChat];
@@ -440,10 +447,7 @@ const ClinicianRegister: React.FC = () => {
       {step === 4 && (
         <div className={`${clinPanelMuted} p-5 sm:p-6 space-y-5 clinician-auth-enter`}>
           <h2 className="text-base font-bold text-slate-900 tracking-tight">Verification documents</h2>
-          <p className="text-sm text-slate-600 leading-relaxed">
-            Upload license certificate and government ID, or provide secure links. Both must be complete if you start
-            either—or skip both if your program accepts later submission.
-          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-slate-200/90 bg-slate-50/40 p-4 space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-600">License certificate</h3>
             <input
@@ -466,23 +470,36 @@ const ClinicianRegister: React.FC = () => {
             <p className={clinLabel}>Or URL</p>
             <input className={clinInput} placeholder="https://…" value={idUrl} onChange={(e) => setIdUrl(e.target.value)} />
           </div>
+          </div>
+          <div className="rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+            If you start document upload, complete both fields or both links. Otherwise leave both empty and add them later.
+          </div>
         </div>
       )}
 
       {step === 5 && (
         <div className={`${clinPanelMuted} p-5 sm:p-6 space-y-4 clinician-auth-enter`}>
           <h2 className="text-base font-bold text-slate-900 tracking-tight">Review & submit</h2>
-          <ul className="text-sm text-slate-700 space-y-2 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
-            <li>
-              License <span className="font-semibold text-slate-900">{licenseNumber}</span> — {specialization}
-            </li>
-            <li>Phone {phone || '—'}</li>
-            <li>Communication: {communicationModes.join(', ') || '—'}</li>
-            <li>
-              Documents: {licenseFile || licenseUrl ? 'License provided' : 'License skipped'};{' '}
-              {idFile || idUrl ? 'ID provided' : 'ID skipped'}
-            </li>
-          </ul>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Credentials</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{specialization || 'Specialization pending'}</p>
+              <p className="mt-1 text-sm text-slate-600">License {licenseNumber || '—'}</p>
+              <p className="mt-1 text-sm text-slate-600">{qualification || 'Qualification not added'}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Practice</p>
+              <p className="mt-2 text-sm text-slate-600">Phone {phone || '—'}</p>
+              <p className="mt-1 text-sm text-slate-600">Modes {communicationModes.join(', ') || '—'}</p>
+              <p className="mt-1 text-sm text-slate-600">Capacity {maxPatientsPerDay || '—'} / day</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4 sm:col-span-2">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500">Documents</p>
+              <p className="mt-2 text-sm text-slate-600">
+                License: {licenseFile || licenseUrl ? 'Provided' : 'Not added'} · ID: {idFile || idUrl ? 'Provided' : 'Not added'}
+              </p>
+            </div>
+          </div>
           <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-950 leading-relaxed">
             After submitting, you’ll be taken directly to the clinician dashboard. You can update details or add documents later.
           </div>

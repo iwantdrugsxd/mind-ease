@@ -45,10 +45,53 @@ const CareTeam: React.FC = () => {
   const [notifications, setNotifications] = React.useState<CareNotification[]>([]);
   const [mobileThreadOpen, setMobileThreadOpen] = React.useState(false);
   const [mobileTab, setMobileTab] = React.useState<'inbox' | 'updates'>('inbox');
+  const [hydrated, setHydrated] = React.useState(false);
+
+  React.useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem('patient:care-team:view');
+      if (!raw) {
+        setHydrated(true);
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        cases?: PatientConsultationListRow[];
+        notifications?: CareNotification[];
+        selectedCaseId?: number | null;
+      };
+      if (Array.isArray(parsed.cases)) setCases(parsed.cases);
+      if (Array.isArray(parsed.notifications)) setNotifications(parsed.notifications);
+      if (parsed.selectedCaseId && Array.isArray(parsed.cases)) {
+        const selectedCase = parsed.cases.find((row) => row.id === parsed.selectedCaseId) || null;
+        setSelected(selectedCase);
+      }
+    } catch {
+      // Ignore hydration failures.
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.sessionStorage.setItem(
+        'patient:care-team:view',
+        JSON.stringify({
+          cases,
+          notifications,
+          selectedCaseId: selected?.id || null,
+        })
+      );
+    } catch {
+      // Ignore persistence failures.
+    }
+  }, [hydrated, cases, notifications, selected]);
 
   const load = React.useCallback(async (opts?: { soft?: boolean }) => {
     const soft = Boolean(opts?.soft);
-    if (!soft) {
+    const isInitial = casesRef.current.length === 0;
+    if (!soft && isInitial) {
       setLoading(true);
       setError(null);
     }
@@ -68,9 +111,11 @@ const CareTeam: React.FC = () => {
       });
     } catch (e: any) {
       if (!soft) {
-        setCases([]);
-        setNotifications([]);
-        setError(e?.message || 'Unable to load care team messages.');
+        if (casesRef.current.length === 0) {
+          setCases([]);
+          setNotifications([]);
+          setError(e?.message || 'Unable to load care team messages.');
+        }
       }
     } finally {
       if (!soft) setLoading(false);
@@ -104,6 +149,8 @@ const CareTeam: React.FC = () => {
     setSelected(row);
     setMobileThreadOpen(true);
   }, []);
+
+  const coldStart = loading && !hydrated && cases.length === 0 && notifications.length === 0;
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -149,7 +196,7 @@ const CareTeam: React.FC = () => {
         <div className={`space-y-4 ${mobileThreadOpen ? 'hidden xl:block' : ''} ${mobileTab === 'updates' ? 'hidden xl:block' : ''}`}>
           <CareTeamInbox
             cases={cases}
-            loading={loading}
+            loading={coldStart}
             selectedCaseId={selected?.id || null}
             onSelect={onSelectCase}
           />
